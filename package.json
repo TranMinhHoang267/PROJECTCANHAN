@@ -8,11 +8,10 @@
     "dev": "nodemon server.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "studio": "prisma studio --port 8888",
-    "db:push": "prisma db push",             
-    "db:migrate": "prisma migrate dev",      
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
     "generate": "prisma generate"
-   
-  },  
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -26,11 +25,13 @@
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.10.1",
     "pg": "^8.16.3",
-    "sequelize": "^6.37.7"
+    "sequelize": "^6.37.7",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
+    "@prisma/client": "^7.3.0",
     "@types/node": "^25.0.8",
     "nodemon": "^3.1.11",
-    "prisma": "^7.2.0"
+    "prisma": "^6.19.2"
   }
 }

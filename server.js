@@ -24,10 +24,12 @@ app.use(express.json());
 const authRoutes = require('./src/routes/authRoutes');
 const adminRoutes = require('./src/routes/adminRoutes');
 const candidate_profile = require('./src/routes/candidate_Routes');
+const avatarRoutes = require('./src/routes/avatarRoute');
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/candidate', candidate_profile);
+app.use('/api/avatar', avatarRoutes);   
 
 app.get('/', (req, res) => {
     res.status(200).json({

@@ -32,7 +32,16 @@ const User = sequelize.define('User', {
         type: DataTypes.STRING
     },
     phone: {
-        type: DataTypes.STRING
+        type: DataTypes.STRING, // Nên để STRING để giữ số 0 ở đầu (VD: 098...)
+        allowNull: false,       // Không được phép để trống
+        unique: true,           // <--- QUAN TRỌNG: Đảm bảo không trùng lặp trong DB
+        validate: {
+        notEmpty: { msg: "Số điện thoại không được để trống" },
+        is: {
+            args: /^[0-9]{10,11}$/, // Regex: Chỉ chấp nhận số, độ dài 10-11 ký tự
+            msg: "Số điện thoại phải bao gồm 10-11 chữ số"
+        }
+    } 
     },
     refresh_token: {
         type: DataTypes.TEXT,

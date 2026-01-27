@@ -4,3 +4,6 @@ node_modules/
 /src/generated/prisma
 
 .DS_Store
+
+# migration_lock.toml
+!prisma/migrations

@@ -5,7 +5,7 @@ const Candidate_profile = require('../models/Candidate_profile');
 const ROLES = require('../constants/roles');
 const sequelize = require('../config/database');
 const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = require('../utils/tokenUtils');
-
+const { Op } = require('sequelize');
 /**
  * Register a new user
  * @param {Object} data - Registration data
@@ -22,12 +22,29 @@ exports.register = async (data) => {
     if (password.length < 6) {
         throw new Error('Password phải có ít nhất 6 ký tự');
     }
-
-    const userExists = await User.findOne({ where: { email } });
-    if (userExists) {
-        throw new Error('Email đã được sử dụng');
+    if(phone.length< 10){
+        throw new Error('Số điện thoại ít nhất 10 ký tự và phải là số');
     }
+    
+    // LOGIC REGISTRATION
+    const existingUser = await User.findOne({
+        where: {
+            [Op.or]: [
+                { email: email },
+                { phone: phone }
+            ]
+        }
+    });
 
+    if (existingUser) {
+        if (existingUser.email === email) {
+            throw new Error('Email đã được sử dụng');
+        }
+        if (existingUser.phone === phone) {
+            throw new Error('Số điện thoại đã được sử dụng');
+        }
+    }    
+    
     // Determine role
     let role = ROLES.CANDIDATE;
     if (company_name && address) {
@@ -105,6 +122,7 @@ exports.login = async ({ email, password }) => {
     }
 
     const isMatch = await user.matchPassword(password);
+
     if (!isMatch) {
         throw new Error('Mật khẩu không đúng');
     }

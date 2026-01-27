@@ -5,6 +5,6 @@ const { protect } = require('../middleware/authMiddleware');
 
 router.get('/profile', protect, candidate_profile.getMyProfile);
 router.put('/profile', protect, candidate_profile.updateProfile);
-
+router.delete('/profile', protect, candidate_profile.deleteProfile);
 
 module.exports = router;

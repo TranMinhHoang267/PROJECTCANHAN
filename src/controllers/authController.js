@@ -3,12 +3,12 @@ const ROLES = require('../constants/roles');
 
 exports.register = async (req, res) => {
     try {
-        const { email, password, full_name } = req.body;
+        const { email, password, full_name, phone } = req.body;
         
         // Basic Input Validation
-        if (!email || !password || !full_name) {
+        if (!email || !password || !full_name || !phone) {
             return res.status(400).json({ 
-                message: 'Email, password và họ tên là bắt buộc' 
+                message: 'Email, password, họ tên và số điện thoại là bắt buộc' 
             });
         }
         
@@ -26,7 +26,8 @@ exports.register = async (req, res) => {
         const clientErrors = [
             'Email phải có đuôi @gmail.com',
             'Password phải có ít nhất 6 ký tự',
-            'Email đã được sử dụng'
+            'Email đã được sử dụng',
+            'Số điện thoại đã sử dụng'
         ];
 
         if (clientErrors.includes(error.message)) {

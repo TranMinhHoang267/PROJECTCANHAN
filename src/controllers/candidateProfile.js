@@ -51,4 +51,45 @@ exports.updateProfile = async (req, res) => {
     }
 };
 
+// delete specific profile fields
+exports.deleteProfile = async (req, res) => {
+    try {
+        const user_id = req.user.id;
+        
+        // Lấy danh sách các trường cần xóa từ body
+        // Client sẽ gửi dạng JSON: { "fields": ["bio", "website", "avatar_url"] }
+        const { fields } = req.body;
+
+        // Validation cơ bản: Kiểm tra xem fields có phải là mảng và có dữ liệu không
+        if (!fields || !Array.isArray(fields) || fields.length === 0) {
+            return res.status(400).json({ 
+                message: 'Vui lòng cung cấp danh sách tên các trường cần xóa (dạng mảng)' 
+            });
+        }
+
+        // Gọi service để xử lý logic xóa
+        const updatedProfile = await candidateService.deleteProfile(user_id, fields);
+
+        return res.status(200).json({
+            message: 'Xóa thông tin thành công',
+            data: updatedProfile
+        });
+
+    } catch (error) {
+        console.error('Lỗi khi xóa thông tin profile:', error);
+        
+        // Bắt lỗi nếu người dùng gửi tên trường không hợp lệ (nếu service có throw lỗi này)
+        if (error.message === 'Danh sách trường cần xóa không hợp lệ') {
+            return res.status(400).json({ message: error.message });
+        }
+
+        return res.status(500).json({
+            message: 'Lỗi server khi xóa thông tin profile',
+            error: error.message
+        });
+    }
+};
+
+
+
 

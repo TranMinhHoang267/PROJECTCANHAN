@@ -5,13 +5,13 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model applications {
-  id                Int       @id @default(autoincrement())
-  job_id            Int?
-  user_id           Int?
+  id                String    @id @default(uuid())
+  job_id            String?
+  user_id           String?
   cv_url            String?   @db.VarChar
   cover_letter      String?
   status            String?   @default("submitted") @db.VarChar
@@ -23,17 +23,17 @@ model applications {
 }
 
 model bookmarks {
-  id         Int       @id @default(autoincrement())
-  user_id    Int?
-  job_id     Int?
+  id         String    @id @default(uuid())
+  user_id    String?
+  job_id     String?
   created_at DateTime? @db.Timestamp(6)
   jobs       jobs?     @relation(fields: [job_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   users      users?    @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 }
 
 model candidate_profiles {
-  id               Int                @id @default(autoincrement())
-  user_id          Int?               @unique
+  id               String             @id @default(uuid())
+  user_id          String?            @unique
   headline         String?            @db.VarChar
   bio              String?
   website          String?            @db.VarChar
@@ -47,19 +47,18 @@ model candidate_profiles {
 }
 
 model candidate_skills {
-  profile_id         Int
-  skill_id           Int
+  profile_id         String
+  skill_id           String
   candidate_profiles candidate_profiles @relation(fields: [profile_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   skills             skills             @relation(fields: [skill_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@id([profile_id, skill_id])
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model companies {
-  id               Int      @id @default(autoincrement())
+  id               String   @id @default(uuid())
   name             String   @db.VarChar(255)
-  user_id          Int?
+  user_id          String?
   description      String?
   website          String?  @db.VarChar(255)
   logo_url         String?  @db.VarChar(255)
@@ -75,8 +74,8 @@ model companies {
 }
 
 model educations {
-  id                 Int                 @id @default(autoincrement())
-  profile_id         Int?
+  id                 String              @id @default(uuid())
+  profile_id         String?
   school_name        String?             @db.VarChar
   degree             String?             @db.VarChar
   start_date         DateTime?           @db.Date
@@ -85,8 +84,8 @@ model educations {
 }
 
 model experiences {
-  id                 Int                 @id @default(autoincrement())
-  profile_id         Int?
+  id                 String              @id @default(uuid())
+  profile_id         String?
   company_name       String?             @db.VarChar
   position           String?             @db.VarChar
   start_date         DateTime?           @db.Date
@@ -96,18 +95,17 @@ model experiences {
 }
 
 model job_skills {
-  job_id   Int
-  skill_id Int
+  job_id   String
+  skill_id String
   jobs     jobs   @relation(fields: [job_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   skills   skills @relation(fields: [skill_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@id([job_id, skill_id])
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model jobs {
-  id               Int            @id @default(autoincrement())
-  company_id       Int?
+  id               String         @id @default(uuid())
+  company_id       String?
   title            String         @db.VarChar
   description      String?
   requirements     String?
@@ -129,10 +127,9 @@ model jobs {
   companies        companies?     @relation(fields: [company_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model resumes {
-  id         Int       @id @default(autoincrement())
-  user_id    Int?
+  id         String    @id @default(uuid())
+  user_id    String?
   file_name  String?   @db.VarChar
   file_url   String?   @db.VarChar
   is_default Boolean?  @default(false)
@@ -141,15 +138,14 @@ model resumes {
 }
 
 model skills {
-  id               Int                @id @default(autoincrement())
+  id               String             @id @default(uuid())
   name             String?            @unique @db.VarChar
   candidate_skills candidate_skills[]
   job_skills       job_skills[]
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model users {
-  id                 Int                 @id @default(autoincrement())
+  id                 String              @id @default(uuid())
   email              String              @unique @db.VarChar(255)
   password           String              @db.VarChar(255)
   full_name          String?             @db.VarChar(255)

@@ -4,5 +4,11 @@ const ROLES = {
     RECRUITER: 'recruiter'
 };
 
+// Tạo mảng chứa các giá trị: ['admin', 'candidate', 'recruiter']
+// Dùng để validate input đầu vào nhanh chóng
+const ROLE_LIST = Object.values(ROLES);
 
-module.exports = ROLES;
+module.exports = {
+    ROLES,
+    ROLE_LIST
+};
