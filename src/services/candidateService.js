@@ -26,11 +26,10 @@ exports.getProfile = async (userId) => {
         phone: profile.user?.phone,
         role: profile.user?.role,
         avatar_url: profile.user?.avatar_url,
-        
         headline: profile.headline,
         bio: profile.bio,
         website: profile.website,
-        linkedin: profile.linkedin_url,
+        linkedin_url: profile.linkedin_url,
         created_at: profile.created_at,
         updated_at: profile.updated_at
     };

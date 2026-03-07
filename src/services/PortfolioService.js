@@ -57,12 +57,12 @@ const _deleteItem = async (Model, userId, itemId) => {
 
 // Helper: Validate Experience data
 const _validateExperience = (data) => {
-    const { company_name, position, start_date } = data;
+    const { company_name, position, start_date, description } = data;
     
     if (!company_name?.trim()) throw new Error('Tên công ty không được để trống');
     if (!position?.trim()) throw new Error('Vị trí công việc không được để trống');
     if (!start_date) throw new Error('Ngày bắt đầu không được để trống');
-    
+    if (!description?.trim()) throw new Error('Mô tả không được để trống'); 
     // Validate logic: end_date phải sau start_date
     if (data.end_date && new Date(data.end_date) < new Date(start_date)) {
         throw new Error('Ngày kết thúc phải sau ngày bắt đầu');
@@ -103,12 +103,13 @@ exports.getFullProfile = async (userId) => {
     ]);
 
     return {
+        // chỉ lấy tên và avatar
         full_name: profile.user?.full_name,
         avatar_url: profile.user?.avatar_url,
-        headline:   profile.headline,
-        bio:        profile.bio,
-        website:    profile.website,
-        linkedin:   profile.linkedin_url,
+        // headline:   profile.headline,
+        // bio:        profile.bio,
+        // website:    profile.website,
+        // linkedin_url:   profile.linkedin_url,
         experiences,
         educations,
         skills
