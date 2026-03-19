@@ -1,64 +1,52 @@
-const { User, sequelize } = require('../models'); // Import Model theo cách của bạn
+const { User } = require('../models');
 const sharp = require('sharp');
 const path = require('path');
 const fs = require('fs');
 
-// Định nghĩa thư mục lưu
 const UPLOAD_DIR = path.join(__dirname, '../uploads/avatars');
 
-// Tạo thư mục nếu chưa có
 if (!fs.existsSync(UPLOAD_DIR)) {
     fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
 
-/**
- * Upload và cập nhật Avatar
- * @param {string} userId 
- * @param {Buffer} fileBuffer 
- */
 exports.updateAvatar = async (userId, fileBuffer) => {
-    let newFilePath = null; // Biến lưu đường dẫn file mới để tiện xóa nếu lỗi
+    let newFilePath = null;
 
     try {
-        // 1. Tìm user để check tồn tại & lấy avatar cũ
+        // 1. Tìm user
         const currentUser = await User.findByPk(userId);
-        if (!currentUser) {
-            throw new Error('User không tồn tại');
-        }
+        if (!currentUser) throw new Error('User không tồn tại');
 
-        // 2. Xử lý ảnh bằng Sharp (Resize 500x500 + WebP)
+        // 2. Xử lý ảnh bằng Sharp
         const fileName = `avatar-${userId}-${Date.now()}.webp`;
         const savePath = path.join(UPLOAD_DIR, fileName);
-        
+
         await sharp(fileBuffer)
             .resize(500, 500, { fit: 'cover', position: 'center' })
             .webp({ quality: 80 })
             .toFile(savePath);
 
-        newFilePath = savePath; // Đánh dấu là đã tạo file này
+        newFilePath = savePath;
 
-        // 3. Đường dẫn lưu DB (Luôn dùng dấu / để chuẩn URL)
+        // 3. Đường dẫn lưu DB
         const dbAvatarUrl = `/uploads/avatars/${fileName}`;
 
         // 4. Update Database
         await User.update(
-            { avatar_url: dbAvatarUrl }, // Chú ý: tên cột trong DB bạn là avatar hay avatar_url? (check lại model)
+            { avatar_url: dbAvatarUrl },
             { where: { id: userId } }
         );
 
-        // 5. Dọn dẹp: Xóa avatar CŨ (nếu có và file đó tồn tại)
-        if (currentUser.avatar_url) {
-            // Chuyển đường dẫn URL thành đường dẫn file hệ thống
-            // Ví dụ: /uploads/avatars/abc.webp -> C:\project\uploads\avatars\abc.webp
+        // 5. Xóa avatar cũ — chỉ xóa nếu là file local, không phải URL ngoài
+        if (currentUser.avatar_url && currentUser.avatar_url.startsWith('/uploads/')) {
             const oldFileName = path.basename(currentUser.avatar_url);
             const oldPath = path.join(UPLOAD_DIR, oldFileName);
-            
+
             if (fs.existsSync(oldPath)) {
                 try {
                     fs.unlinkSync(oldPath);
                 } catch (err) {
                     console.error('Không thể xóa avatar cũ:', err);
-                    // Không throw lỗi ở đây để tránh crash luồng chính
                 }
             }
         }
@@ -66,13 +54,40 @@ exports.updateAvatar = async (userId, fileBuffer) => {
         return dbAvatarUrl;
 
     } catch (error) {
-        // --- ROLLBACK QUAN TRỌNG ---
-        // Nếu lỗi DB (bước 4) hoặc logic khác, mà file mới đã lỡ tạo (bước 2)
-        // Thì phải xóa file mới đi để không bị rác server
+        // Rollback: xóa file mới nếu lỡ tạo
         if (newFilePath && fs.existsSync(newFilePath)) {
             fs.unlinkSync(newFilePath);
         }
-        
         throw error;
     }
+};
+
+// Xóa avatar
+exports.deleteAvatar = async (userId) => {
+    const currentUser = await User.findByPk(userId);
+    if (!currentUser) throw new Error('User không tồn tại');
+
+    if (!currentUser.avatar_url) throw new Error('User chưa có avatar để xóa');
+
+    // Xóa file local nếu có
+    if (currentUser.avatar_url.startsWith('/uploads/')) {
+        const oldFileName = path.basename(currentUser.avatar_url);
+        const oldPath = path.join(UPLOAD_DIR, oldFileName);
+
+        if (fs.existsSync(oldPath)) {
+            try {
+                fs.unlinkSync(oldPath);
+            } catch (err) {
+                console.error('Không thể xóa file avatar:', err);
+            }
+        }
+    }
+
+    // Set avatar_url về null trong DB
+    await User.update(
+        { avatar_url: null },
+        { where: { id: userId } }
+    );
+
+    return true;
 };

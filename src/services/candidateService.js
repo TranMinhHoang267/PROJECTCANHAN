@@ -43,10 +43,8 @@ exports.getProfile = async (userId) => {
  * @param {Array<string>} fieldsToDelete - Array of field names to delete
  */
 exports.updateProfile = async (userId, data) => {
-    const {
-        full_name, phone, bio,
-        website, headline, linkedin_url, avatar_url
-    } = data;
+
+    const { full_name, phone, bio, website, headline, linkedin_url } = data;
 
     // Validation (Logic business)
     if (phone && !/^\d{10,11}$/.test(phone)) {
@@ -64,7 +62,7 @@ exports.updateProfile = async (userId, data) => {
         const userUpdateData = {};
         if (full_name) userUpdateData.full_name = full_name;
         if (phone) userUpdateData.phone = phone;
-        if (avatar_url) userUpdateData.avatar_url = avatar_url;
+        // if (avatar_url) userUpdateData.avatar_url = avatar_url;
 
         if (Object.keys(userUpdateData).length > 0) {
             await User.update(userUpdateData, {
@@ -117,9 +115,9 @@ exports.updateProfile = async (userId, data) => {
         // Format lại dữ liệu trả về cho đẹp (đổi .User thành .user)
         return {
             full_name: updatedProfile.user?.full_name,
-            phone: updatedProfile.user?.phone,
+            // phone: updatedProfile.user?.phone,
             email: updatedProfile.user?.email,
-            avatar_url: updatedProfile.user?.avatar_url,
+            // avatar_url: updatedProfile.user?.avatar_url,
             headline: updatedProfile.headline,
             bio: updatedProfile.bio,
             website: updatedProfile.website,
@@ -135,59 +133,40 @@ exports.updateProfile = async (userId, data) => {
 };
 
 exports.deleteProfile = async (userId, fieldsToDelete) => {
-    // Danh sách các trường hợp lệ có thể xóa
+    // Chỉ cho phép xóa các trường của candidate_profile
+    // avatar_url phải xóa qua avatar_controller riêng
     const ALLOWED_PROFILE_FIELDS = ['headline', 'bio', 'website', 'linkedin_url'];
 
-    const ALLOWED_USER_FIELDS = ['avatar_url'];
-
-    // Nếu không truyền mảng hoặc mảng rỗng thì return luôn
     if (!Array.isArray(fieldsToDelete) || fieldsToDelete.length === 0) {
         throw new Error('Danh sách trường cần xóa không hợp lệ');
+    }
+
+    // Lọc ra các trường hợp lệ
+    const profileUpdateData = {};
+    fieldsToDelete.forEach(field => {
+        if (ALLOWED_PROFILE_FIELDS.includes(field)) {
+            profileUpdateData[field] = null;
+        }
+    });
+
+    // Nếu không có trường hợp lệ nào thì báo lỗi luôn
+    if (Object.keys(profileUpdateData).length === 0) {
+        throw new Error('Không có trường hợp lệ nào để xóa');
     }
 
     const t = await sequelize.transaction();
 
     try {
-        // 1. Chuẩn bị dữ liệu để update bảng User (avatar_url)
-        const userUpdateData = {};
-        fieldsToDelete.forEach(field => {
-            if (ALLOWED_USER_FIELDS.includes(field)) {
-                userUpdateData[field] = null; // Set về null để xóa
-            }
+        await Candidate_profile.update(profileUpdateData, {
+            where: { user_id: userId },
+            transaction: t
         });
-
-        // 2. Chuẩn bị dữ liệu để update bảng Candidate_profile
-        const profileUpdateData = {};
-        fieldsToDelete.forEach(field => {
-            if (ALLOWED_PROFILE_FIELDS.includes(field)) {
-                profileUpdateData[field] = null; // Set về null để xóa
-            }
-        });
-
-        // 3. Thực hiện update bảng User (nếu có trường cần xóa)
-        if (Object.keys(userUpdateData).length > 0) {
-            await User.update(userUpdateData, {
-                where: { id: userId },
-                transaction: t
-            });
-        }
-
-        // 4. Thực hiện update bảng Candidate_profile (nếu có trường cần xóa)
-        if (Object.keys(profileUpdateData).length > 0) {
-            await Candidate_profile.update(profileUpdateData, {
-                where: { user_id: userId },
-                transaction: t
-            });
-        }
 
         await t.commit();
 
-        // 5. Trả về dữ liệu mới nhất sau khi xóa
-        // Tận dụng hàm getProfile có sẵn hoặc query lại
         return exports.getProfile(userId);
 
-   } catch (error) {
-        // Kiểm tra xem transaction đã commit chưa, chưa thì mới rollback
+    } catch (error) {
         if (!t.finished) {
             await t.rollback();
         }

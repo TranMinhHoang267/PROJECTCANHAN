@@ -1,5 +1,5 @@
 const path = require('path');
-const fs   = require('fs');
+const fs = require('fs');
 const { Resume, sequelize } = require('../models');
 
 // Thư mục lưu file PDF

@@ -3,9 +3,9 @@ const router    = express.Router();
 const multer    = require('multer');
 const path      = require('path');
 const fs        = require('fs');
-const { protect } = require('../middleware/authMiddleware');
+const { protect, authorize } = require('../middleware/authMiddleware');
 const ResumeController = require('../controllers/ResumeController');
-
+const {ROLES} = require('../constants/roles');
 // ==============================================================================
 // CẤU HÌNH MULTER — Lưu file PDF vào disk
 // ==============================================================================
@@ -47,7 +47,7 @@ const upload = multer({
 // MIDDLEWARE: Tất cả routes đều cần xác thực
 // ==============================================================================
 router.use(protect);
-
+router.use(authorize(ROLES.CANDIDATE)); 
 // ==============================================================================
 // ROUTES
 // ==============================================================================
@@ -58,36 +58,46 @@ router.use(protect);
  * @body    form-data: { cv: <file.pdf> }
  * @access  Private
  */
-router.post('/upload', upload.single('cv'), ResumeController.uploadResume);
 
+router.post('/upload', 
+    upload.single('cv'),
+    ResumeController.uploadResume 
+)
 /**
  * @route   GET /api/resumes
  * @desc    Lấy danh sách tất cả CV của user
  * @access  Private
  */
-router.get('/', ResumeController.getResumes);
+router.get('/',
+    ResumeController.getResumes
+);
 
 /**
  * @route   PATCH /api/resumes/:id/default
  * @desc    Đặt CV làm CV mặc định (CV chính)
  * @access  Private
  */
-router.patch('/:id/default', ResumeController.setDefault);
+router.patch('/:id/default',
+    ResumeController.setDefault
+);
 
 /**
  * @route   GET /api/resumes/:id/view
  * @desc    Xem trước CV (stream PDF — dùng cho PDF Viewer)
  * @access  Private
  */
-router.get('/:id/view', ResumeController.viewResume);
+router.get('/:id/view', 
+    ResumeController.viewResume
+)
 
 /**
  * @route   DELETE /api/resumes/:id
  * @desc    Xóa một CV
  * @access  Private
  */
-router.delete('/:id', ResumeController.deleteResume);
-
+router.delete('/:id',
+    ResumeController.deleteResume
+);
 // ==============================================================================
 // XỬ LÝ LỖI MULTER (file quá lớn, sai định dạng...)
 // ==============================================================================

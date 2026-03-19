@@ -7,3 +7,5 @@ node_modules/
 
 # migration_lock.toml
 !prisma/migrations
+
+uploads/

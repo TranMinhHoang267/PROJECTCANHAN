@@ -1,4 +1,4 @@
-require ('dotenv').config();
+require('dotenv').config();
 const sequelize = require('./src/config/database'); // Kết nối Database
 const express = require('express');
 const app = express();

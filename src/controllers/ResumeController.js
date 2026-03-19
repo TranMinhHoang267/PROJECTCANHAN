@@ -10,12 +10,19 @@ const handleError = (res, error, context) => {
     if (
         message === 'Không tìm thấy CV hoặc bạn không có quyền thay đổi.' ||
         message === 'Không tìm thấy CV hoặc bạn không có quyền xóa.'     ||
-        message === 'Không tìm thấy CV hoặc bạn không có quyền xem.'     ||
-        message === 'File CV không tồn tại trên server.'
-    ) {
-        return res.status(404).json({ message });
+        message === 'Không tìm thấy CV hoặc bạn không có quyền xem.'
+    ) 
+    {
+        return res.status(404).json({ status: 'error', message });
     }
-
+    // 404 — File tồn tại trong DB nhưng mất trên disk
+    if (message === 'File CV không tồn tại trên server.') {
+        return res.status(404).json({ 
+            status: 'error', 
+            message: 'File CV không tồn tại trên server. Vui lòng upload lại.' 
+        });
+    }
+    
     return res.status(500).json({ message: `Lỗi server khi ${context}`, error: message });
 };
 
@@ -29,8 +36,10 @@ exports.uploadResume = async (req, res) => {
             return res.status(400).json({ message: 'Vui lòng chọn file PDF để upload.' });
         }
         const data = await ResumeService.uploadResume(req.user.id, req.file);
-        return res.status(201).json({ message: 'Upload CV thành công', data });
-    } catch (error) {
+        return res.status(201).json({ status: 'success', 
+        message: 'Upload CV thành công', data });
+    } 
+    catch (error) {
         return handleError(res, error, 'upload CV');
     }
 };
@@ -55,7 +64,7 @@ exports.getResumes = async (req, res) => {
 exports.setDefault = async (req, res) => {
     try {
         const data = await ResumeService.setDefault(req.user.id, req.params.id);
-        return res.status(200).json({ message: 'Đặt CV mặc định thành công', data });
+        return res.status(200).json({ status: 'success', message: 'Đặt CV mặc định thành công', data });
     } catch (error) {
         return handleError(res, error, 'đặt CV mặc định');
     }
@@ -68,7 +77,7 @@ exports.setDefault = async (req, res) => {
 exports.deleteResume = async (req, res) => {
     try {
         await ResumeService.deleteResume(req.user.id, req.params.id);
-        return res.status(200).json({ message: 'Xóa CV thành công' });
+        return res.status(200).json({status: 'success', message: 'Xóa CV thành công' });
     } catch (error) {
         return handleError(res, error, 'xóa CV');
     }
