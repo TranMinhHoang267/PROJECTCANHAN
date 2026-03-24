@@ -239,9 +239,24 @@ exports.updateSkills = async (userId, skillNames) => {
     }
 };
 
-// Xóa tất cả kỹ năng
-exports.deleteAllSkills = async (userId) => {
+// Xóa 1 kỹ năng theo id
+exports.deleteSkill = async (userId, skillId) => {
     const profile = await _getProfile(userId);
-    await profile.setSkills([]); // Xóa tất cả quan hệ trong bảng candidate_skills
+
+    // Kiểm tra skill này có trong hồ sơ không
+    const currentSkills = await profile.getSkills();
+    const exists = currentSkills.some(s => s.id === skillId);
+
+    if (!exists) throw new Error('Kỹ năng không tồn tại trong hồ sơ của bạn.');
+
+    // Chỉ xóa liên kết trong candidate_skills, không xóa bảng skills
+    await profile.removeSkill(skillId);
     return true;
 };
+
+// // Xóa tất cả kỹ năng
+// exports.deleteAllSkills = async (userId) => {
+//     const profile = await _getProfile(userId);
+//     await profile.setSkills([]); // Xóa tất cả quan hệ trong bảng candidate_skills
+//     return true;
+// };

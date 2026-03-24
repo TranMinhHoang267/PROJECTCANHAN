@@ -126,10 +126,17 @@ router.delete('/educations', PortfolioController.deleteAllEducations);
 router.put('/skills', PortfolioController.updateSkills);
 
 /**
- * @route   DELETE /api/portfolio/skills
- * @desc    Xóa tất cả kỹ năng (cẩn thận!)
+ * @route   DELETE /api/portfolio/skills/:id
+ * @desc    Xóa một kỹ năng
+ * @params  id - ID của kỹ năng
  * @access  Private
  */
-router.delete('/skills', PortfolioController.deleteAllSkills);
+router.delete('/skills/:id', PortfolioController.deleteSkill);
+// /**
+//  * @route   DELETE /api/portfolio/skills
+//  * @desc    Xóa tất cả kỹ năng (cẩn thận!)
+//  * @access  Private
+//  */
+// router.delete('/skills', PortfolioController.deleteAllSkills);
 
 module.exports = router;

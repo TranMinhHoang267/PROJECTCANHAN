@@ -8,16 +8,24 @@ const handleError = (res, error, context) => {
     const { message } = error;
 
     if (message === 'Hồ sơ ứng viên không tồn tại. Vui lòng tạo hồ sơ chung trước.')
-        return res.status(404).json({ message });
-    if (message === 'Không tìm thấy dữ liệu hoặc bạn không có quyền sửa.' ||
-        message === 'Không tìm thấy dữ liệu để xóa.')
-        return res.status(404).json({ message });
-    if (message.includes('không được để trống') || message.includes('phải sau'))
-        return res.status(400).json({ message });
-    if (message === 'Dữ liệu gửi lên phải là danh sách (Mảng).')
-        return res.status(400).json({ message });
+        return res.status(404).json({ status: 'error', message });
 
-    return res.status(500).json({ message: `Lỗi server khi ${context}`, error: message });
+    if (message === 'Không tìm thấy dữ liệu hoặc bạn không có quyền sửa.' ||
+        message === 'Không tìm thấy dữ liệu để xóa.'                      ||
+        message === 'Kỹ năng không tồn tại trong hồ sơ của bạn.')          // ← Thêm
+        return res.status(404).json({ status: 'error', message });
+
+    if (message.includes('không được để trống') || message.includes('phải sau'))
+        return res.status(400).json({ status: 'error', message });
+
+    if (message === 'Dữ liệu gửi lên phải là danh sách (Mảng).')
+        return res.status(400).json({ status: 'error', message });
+
+    return res.status(500).json({ 
+        status: 'error',
+        message: `Lỗi server khi ${context}`, 
+        error: message 
+    });
 };
 
 // ==============================================================================
@@ -161,21 +169,31 @@ exports.updateSkills = async (req, res) => {
     try {
         const { skills } = req.body;
         if (!skills || !Array.isArray(skills)) {
-            return res.status(400).json({ message: 'Vui lòng cung cấp danh sách kỹ năng (dạng mảng)' });
+            return res.status(400).json({ 
+                status: 'error',
+                message: 'Vui lòng cung cấp danh sách kỹ năng (dạng mảng)' 
+            });
         }
         const data = await PortfolioService.updateSkills(req.user.id, skills);
-        return res.status(200).json({ message: 'Cập nhật kỹ năng thành công', data });
+        return res.status(200).json({ 
+            status: 'success',
+            message: 'Cập nhật kỹ năng thành công', 
+            data 
+        });
     } catch (error) {
         return handleError(res, error, 'cập nhật kỹ năng');
     }
 };
 
-// DELETE /api/portfolio/skills
-exports.deleteAllSkills = async (req, res) => {
+// DELETE /api/portfolio/skills/:id
+exports.deleteSkill = async (req, res) => {
     try {
-        await PortfolioService.deleteAllSkills(req.user.id);
-        return res.status(200).json({ message: 'Xóa tất cả kỹ năng thành công' });
+        await PortfolioService.deleteSkill(req.user.id, req.params.id);
+        return res.status(200).json({ 
+            status: 'success',
+            message: 'Xóa kỹ năng thành công' 
+        });
     } catch (error) {
-        return handleError(res, error, 'xóa tất cả kỹ năng');
+        return handleError(res, error, 'xóa kỹ năng');
     }
 };
