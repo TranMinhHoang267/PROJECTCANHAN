@@ -1,36 +1,83 @@
 const { Company, User, Job } = require('../models');
+const {Op} = require('sequelize');
 
 // ==============================================================================
 // 1. DANH SÁCH CÔNG TY CẦN DUYỆT (status = pending)
 // ==============================================================================
-exports.getPendingCompanies = async () => {
-    return await Company.findAll({
+exports.getPendingCompanies = async (filters = {}) => {
+    const pageSize   = Math.min(50, Math.max(1, parseInt(filters.limit) || 10));
+    const pageNumber = Math.max(1, parseInt(filters.page) || 1);
+    const offset     = (pageNumber - 1) * pageSize;
+
+    const { count, rows } = await Company.findAndCountAll({
         where: { status: 'pending' },
         include: [{
             model: User,
             as: 'user',
             attributes: ['id', 'full_name', 'email', 'phone', 'created_at']
         }],
-        order: [['created_at', 'ASC']]  // Cũ nhất lên đầu (FIFO)
+        order:    [['created_at', 'ASC']], // FIFO
+        limit:    pageSize,
+        offset,
+        distinct: true
     });
+
+    return {
+        total_items:  count,
+        total_pages:  Math.ceil(count / pageSize),
+        current_page: pageNumber,
+        companies:    rows
+    };
 };
+
+
+
 
 // ==============================================================================
 // 2. DANH SÁCH TẤT CẢ CÔNG TY (lọc theo status)
 // ==============================================================================
 exports.getAllCompanies = async (filters = {}) => {
-    const where = {};
-    if (filters.status) where.status = filters.status;
+    const {
+        status,
+        keyword,
+        page  = 1,
+        limit = 10
+    } = filters;
 
-    return await Company.findAll({
+    const pageSize   = Math.min(50, Math.max(1, parseInt(limit)));
+    const pageNumber = Math.max(1, parseInt(page));
+    const offset     = (pageNumber - 1) * pageSize;
+
+    const where = {};
+    if (status) where.status = status;
+
+    // Tìm kiếm theo tên công ty hoặc thành phố
+    if (keyword) {
+        where[Op.or] = [
+            { name: { [Op.substring]: keyword.trim() } },
+            { city: { [Op.substring]: keyword.trim() } }
+        ];
+    }
+
+    const { count, rows } = await Company.findAndCountAll({
         where,
         include: [{
             model: User,
             as: 'user',
             attributes: ['id', 'full_name', 'email', 'phone']
         }],
-        order: [['created_at', 'DESC']]
+        order:    [['created_at', 'DESC']],
+        limit:    pageSize,
+        offset,
+        distinct: true
     });
+
+    return {
+        total_items:  count,
+        total_pages:  Math.ceil(count / pageSize),
+        current_page: pageNumber,
+        companies:    rows
+    };
 };
 
 // ==============================================================================
