@@ -1,0 +1,51 @@
+model Job {
+  id               String   @id @default(uuid()) @map("id")
+  company_id       String   @map("company_id")
+  title            String   @map("title")
+  description      String?  @db.Text @map("description")
+  requirements     String?  @db.Text @map("requirements")
+  benefits         String?  @db.Text @map("benefits")
+  salary_min       Int?     @map("salary_min")
+  salary_max       Int?     @map("salary_max")
+  location         String?  @map("location")
+  job_type         String?  @map("job_type")
+  job_level        String?  @map("job_level")
+  status           String   @default("pending") @map("status")
+  rejection_reason String?  @db.Text @map("rejection_reason")
+  deadline         DateTime? @map("deadline")
+  views_count      Int      @default(0) @map("views_count")
+  created_at       DateTime @default(now()) @map("created_at")
+  updated_at       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  company   Company    @relation("CompanyToJob", fields: [company_id], references: [id])
+  skills    Job_skill[] @relation("JobToJobSkill")
+  applications Application[] @relation("JobToApplication")
+  bookmarks    Bookmark[]    @relation("JobToBookmark")
+
+  @@index([company_id])
+  @@map("jobs")
+}
+
+model Job_skill {
+  job_id   String @map("job_id")
+  skill_id String @map("skill_id")
+
+  job   Job   @relation("JobToJobSkill", fields: [job_id], references: [id], onDelete: Cascade)
+  skill Skill @relation("SkillToJobSkill", fields: [skill_id], references: [id], onDelete: Cascade)
+
+  @@id([job_id, skill_id])
+  @@index([job_id, skill_id])
+  @@map("job_skills")
+}
+
+model Skill {
+  id   String @id @default(uuid()) @map("id")
+  name String @unique @map("name")
+
+  // Relations
+  jobs       Job_skill[]       @relation("SkillToJobSkill")
+  candidates  Candidate_skill[] @relation("SkillToCandidateSkill")
+
+  @@map("skills")
+}

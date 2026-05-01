@@ -1,0 +1,53 @@
+model Resume {
+  id          String   @id @default(uuid()) @map("id")
+  user_id     String   @map("user_id")
+  title       String   @map("title")
+  file_url    String   @map("file_url")
+  is_default  Boolean  @default(false) @map("is_default")
+  created_at  DateTime @default(now()) @map("created_at")
+  updated_at  DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user User @relation("UserToResume", fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("resumes")
+}
+
+model Application {
+  id                String   @id @default(uuid()) @map("id")
+  job_id            String   @map("job_id")
+  user_id           String   @map("user_id")
+  company_id        String   @map("company_id")
+  full_name         String   @map("full_name")
+  email             String   @map("email")
+  phone             String   @map("phone")
+  resume_url        String   @map("resume_url")
+  cover_letter      String?  @db.Text @map("cover_letter")
+  status            String   @default("pending") @map("status")
+  created_at        DateTime @default(now()) @map("created_at")
+  updated_at        DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  job      Job     @relation("JobToApplication", fields: [job_id], references: [id])
+  user     User    @relation("UserToApplication", fields: [user_id], references: [id])
+  company  Company? @relation("ApplicationToCompany", fields: [company_id], references: [id])
+
+  @@index([job_id, user_id])
+  @@map("applications")
+}
+
+model Bookmark {
+  id        String   @id @default(uuid()) @map("id")
+  user_id   String   @map("user_id")
+  job_id    String   @map("job_id")
+  created_at DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation("UserToBookmark", fields: [user_id], references: [id], onDelete: Cascade)
+  job  Job  @relation("JobToBookmark", fields: [job_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, job_id])
+  @@index([user_id, job_id])
+  @@map("bookmarks")
+}

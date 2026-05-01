@@ -1,5 +1,5 @@
-const { Job, Company, Skill, Job_skill, sequelize } = require('../models');
-const { Op } = require('sequelize');
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 
 exports.searchJobs = async (filters) => {
     const { 
@@ -9,75 +9,84 @@ exports.searchJobs = async (filters) => {
 
     const pageSize = parseInt(limit);
     const pageNumber = parseInt(page);
-    const offset = (pageNumber - 1) * pageSize;
+    const skip = (pageNumber - 1) * pageSize;
 
-    const conditions = [{ 
-        status: 'approved' 
-    }];
+    // Build where conditions
+    const where = {
+        status: 'approved'
+    };
 
-    // Keyword: tìm trong title, company.name, skill.name
+    // Keyword: search in title, company name, or skill name
     if (keyword) {
-        const escapedKey = keyword.trim().replace(/[%_\\]/g, '\\$&');
-        conditions.push({
-            [Op.or]: [
-                { title: { [Op.substring]: escapedKey } },
-                { '$company.name$': { [Op.substring]: escapedKey } },
-                {
-                    id: {
-                        [Op.in]: sequelize.literal(`(
-                            SELECT js.job_id 
-                            FROM job_skills js
-                            INNER JOIN skills s ON js.skill_id = s.id
-                            WHERE s.name LIKE '%${escapedKey}%'
-                        )`)
+        const escapedKey = keyword.trim();
+        where.OR = [
+            { title: { contains: escapedKey, mode: 'insensitive' } },
+            { company: { name: { contains: escapedKey, mode: 'insensitive' } } },
+            { 
+                skills: {
+                    some: {
+                        skill: {
+                            name: { contains: escapedKey, mode: 'insensitive' }
+                        }
                     }
                 }
-            ]
-        });
-    }
-
-    // Location: tìm trong job.location, company.city, company.address
-    if (location) {
-        const escapedLoc = location.trim().replace(/[%_\\]/g, '\\$&');
-        conditions.push({
-            [Op.or]: [
-                { location: { [Op.substring]: escapedLoc } },
-                { '$company.city$': { [Op.substring]: escapedLoc } },
-                { '$company.address$': { [Op.substring]: escapedLoc } }
-            ]
-        });
-    }
-
-    if (job_type)  conditions.push({ job_type });
-    if (job_level) conditions.push({ job_level });
-    if (salary)    conditions.push({ salary_max: { [Op.gte]: parseInt(salary) } });
-
-    const { count, rows } = await Job.findAndCountAll({
-        where: { [Op.and]: conditions },
-        include: [
-            {
-                model: Company,
-                as: 'company',
-                attributes: ['id', 'name', 'logo_url', 'city', 'address']
-            },
-            {
-                model: Skill,
-                as: 'skills',
-                attributes: ['id', 'name'],
-                through: { attributes: [] }
             }
-        ],
-        order: [['createdAt', 'DESC']],
-        limit: pageSize,
-        offset,
-        distinct: true,
-        subQuery: false
-    });
+        ];
+    }
+
+    // Location: search in job location, company city, or company address
+    if (location) {
+        const escapedLoc = location.trim();
+        where.OR = [
+            { location: { contains: escapedLoc, mode: 'insensitive' } },
+            { company: { city: { contains: escapedLoc, mode: 'insensitive' } } },
+            { company: { address: { contains: escapedLoc, mode: 'insensitive' } } }
+        ];
+    }
+
+    if (job_type)  where.job_type = job_type;
+    if (job_level) where.job_level = job_level;
+    if (salary)    where.salary_max = { gte: parseInt(salary) };
+
+    // Get total count and jobs in parallel
+    const [count, jobs] = await Promise.all([
+        prisma.job.count({ where }),
+        prisma.job.findMany({
+            where,
+            include: {
+                company: {
+                    select: {
+                        id: true,
+                        name: true,
+                        logo_url: true,
+                        city: true,
+                        address: true
+                    }
+                },
+                skills: {
+                    include: {
+                        skill: {
+                            select: { id: true, name: true }
+                        }
+                    }
+                }
+            },
+            orderBy: { created_at: 'desc' },
+            take: pageSize,
+            skip
+        })
+    ]);
+
+    // Transform skills to match old Sequelize format
+    const transformedJobs = jobs.map(job => ({
+        ...job,
+        skills: job.skills.map(js => js.skill)
+    }));
 
     return {
         total_items: count,
         total_pages: Math.ceil(count / pageSize),
         current_page: pageNumber,
-        jobs: rows
+        jobs: transformedJobs
     };
 };

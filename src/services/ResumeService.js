@@ -1,6 +1,7 @@
 const path = require('path');
 const fs = require('fs');
-const { Resume, sequelize } = require('../models');
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 
 // Thư mục lưu file PDF
 const UPLOAD_DIR = path.join(__dirname, '../uploads/resumes');
@@ -19,19 +20,21 @@ if (!fs.existsSync(UPLOAD_DIR)) {
  * @param {{ originalname, filename, size }} file  — object từ multer
  */
 exports.uploadResume = async (userId, file) => {
-    
+
     // Đếm số CV hiện tại để tự đặt is_default nếu đây là CV đầu tiên
-    const count = await Resume.count({ where: { user_id: userId } });
+    const count = await prisma.resume.count({ where: { user_id: userId } });
 
     const fileUrl = `/uploads/resumes/${file.filename}`;
     const fileSizeKB = Math.round(file.size / 1024);
 
-    const resume = await Resume.create({
-        user_id:   userId,
-        file_name: file.originalname,
-        file_url:  fileUrl,
-        file_size: fileSizeKB,
-        is_default: count === 0   // CV đầu tiên → mặc định là default
+    const resume = await prisma.resume.create({
+        data: {
+            user_id:   userId,
+            title: file.originalname,
+            file_url:  fileUrl,
+            file_size: fileSizeKB,
+            is_default: count === 0   // CV đầu tiên → mặc định là default
+        }
     });
 
     return resume;
@@ -41,13 +44,13 @@ exports.uploadResume = async (userId, file) => {
 // 2. LẤY DANH SÁCH CV
 // ==============================================================================
 exports.getResumes = async (userId) => {
-    return await Resume.findAll({
+    return await prisma.resume.findMany({
         where: { user_id: userId },
-        order: [
-            ['is_default', 'DESC'],  // CV default lên đầu
-            ['created_at', 'DESC']
+        orderBy: [
+            { is_default: 'desc' },  // CV default lên đầu
+            { created_at: 'desc' }
         ],
-        attributes: ['id', 'file_name', 'file_url', 'file_size', 'is_default', 'created_at']
+        select: { id: true, title: true, file_url: true, file_size: true, is_default: true, created_at: true }
     });
 };
 
@@ -55,37 +58,30 @@ exports.getResumes = async (userId) => {
 // 3. ĐẶT CV LÀM DEFAULT
 // ==============================================================================
 exports.setDefault = async (userId, resumeId) => {
-    const t = await sequelize.transaction();
-    try {
-        // Bỏ default tất cả CV hiện tại của user
-        await Resume.update(
-            { is_default: false },
-            { where: { user_id: userId }, transaction: t }
-        );
+    // Bỏ default tất cả CV hiện tại của user
+    await prisma.resume.updateMany({
+        where: { user_id: userId },
+        data: { is_default: false }
+    });
 
-        // Đặt default cho CV được chọn (đồng thời verify CV đó thuộc về user này)
-        const [updated] = await Resume.update(
-            { is_default: true },
-            { where: { id: resumeId, user_id: userId }, transaction: t }
-        );
+    // Đặt default cho CV được chọn (đồng thời verify CV đó thuộc về user này)
+    const updated = await prisma.resume.updateMany({
+        where: { id: resumeId, user_id: userId },
+        data: { is_default: true }
+    });
 
-        if (!updated) {
-            throw new Error('Không tìm thấy CV hoặc bạn không có quyền thay đổi.');
-        }
-
-        await t.commit();
-        return await Resume.findByPk(resumeId);
-    } catch (error) {
-        await t.rollback();
-        throw error;
+    if (updated.count === 0) {
+        throw new Error('Không tìm thấy CV hoặc bạn không có quyền thay đổi.');
     }
+
+    return await prisma.resume.findUnique({ where: { id: resumeId } });
 };
 
 // ==============================================================================
 // 4. XÓA CV
 // ==============================================================================
 exports.deleteResume = async (userId, resumeId) => {
-    const resume = await Resume.findOne({ where: { id: resumeId, user_id: userId } });
+    const resume = await prisma.resume.findFirst({ where: { id: resumeId, user_id: userId } });
 
     if (!resume) {
         throw new Error('Không tìm thấy CV hoặc bạn không có quyền xóa.');
@@ -101,16 +97,19 @@ exports.deleteResume = async (userId, resumeId) => {
         }
     }
 
-    await resume.destroy();
+    await prisma.resume.delete({ where: { id: resumeId } });
 
     // Nếu CV bị xóa là default thì tự động set CV mới nhất còn lại làm default
     if (resume.is_default) {
-        const latest = await Resume.findOne({
+        const latest = await prisma.resume.findFirst({
             where: { user_id: userId },
-            order: [['created_at', 'DESC']]
+            orderBy: { created_at: 'desc' }
         });
         if (latest) {
-            await latest.update({ is_default: true });
+            await prisma.resume.update({
+                where: { id: latest.id },
+                data: { is_default: true }
+            });
         }
     }
 
@@ -124,7 +123,7 @@ exports.deleteResume = async (userId, resumeId) => {
  * Trả về absolute path của file PDF để controller dùng res.sendFile()
  */
 exports.getFilePath = async (userId, resumeId) => {
-    const resume = await Resume.findOne({ where: { id: resumeId, user_id: userId } });
+    const resume = await prisma.resume.findFirst({ where: { id: resumeId, user_id: userId } });
     if (!resume) {
         throw new Error('Không tìm thấy CV hoặc bạn không có quyền xem.');
     }
@@ -132,5 +131,5 @@ exports.getFilePath = async (userId, resumeId) => {
     if (!fs.existsSync(filePath)) {
         throw new Error('File CV không tồn tại trên server.');
     }
-    return { filePath, fileName: resume.file_name };
+    return { filePath, fileName: resume.title };
 };

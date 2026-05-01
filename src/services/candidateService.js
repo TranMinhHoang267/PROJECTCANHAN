@@ -1,4 +1,5 @@
-const { User, Candidate_profile, sequelize } = require('../models');
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 
 /**
  * Get candidate profile by user ID
@@ -6,14 +7,13 @@ const { User, Candidate_profile, sequelize } = require('../models');
  * @returns {Promise<Object>} Formatted profile data
  */
 exports.getProfile = async (userId) => {
-    const profile = await Candidate_profile.findOne({
+    const profile = await prisma.candidate_profile.findUnique({
         where: { user_id: userId },
-        include: [
-            {
-                model: User,
-                as: 'user',
-                attributes: ['full_name', 'phone', 'role', 'avatar_url']
-            }]
+        include: {
+            user: {
+                select: { full_name: true, phone: true, role: true, avatar_url: true }
+            }
+        }
     });
 
     if (!profile) {
@@ -47,97 +47,80 @@ exports.updateProfile = async (userId, data) => {
     const { full_name, phone, bio, website, headline, linkedin_url } = data;
 
     // Validation (Logic business)
-    if (!/^0\d{9}$/.test(phone)) {
+    if (phone && !/^0\d{9}$/.test(phone)) {
         throw new Error('Số điện thoại phải bắt đầu bằng số 0 và có đúng 10 chữ số');
-    } 
+    }
 
     if (linkedin_url && !linkedin_url.startsWith('https://')) {
         throw new Error('LinkedIn URL không hợp lệ cần thêm https://');
     }
 
     if (full_name !== undefined) {
-
-    const trimmed = full_name.trim();
-    if (!trimmed) throw new Error('Họ tên không được để trống');
-    if (trimmed.length < 2 || trimmed.length > 50) throw new Error('Họ tên phải từ 2 đến 50 ký tự');
-    if (!/^[a-zA-ZÀ-ỹ\s]+$/.test(trimmed)) throw new Error('Họ tên chỉ được chứa chữ cái và khoảng trắng');
+        const trimmed = full_name.trim();
+        if (!trimmed) throw new Error('Họ tên không được để trống');
+        if (trimmed.length < 2 || trimmed.length > 50) throw new Error('Họ tên phải từ 2 đến 50 ký tự');
+        if (!/^[a-zA-ZÀ-ỹ\s]+$/.test(trimmed)) throw new Error('Họ tên chỉ được chứa chữ cái và khoảng trắng');
     }
 
-    const t = await sequelize.transaction();
+    // Update table users
+    const userUpdateData = {};
+    if (full_name) userUpdateData.full_name = full_name;
+    if (phone) userUpdateData.phone = phone;
 
-    try {
-        // Update table users
-        const userUpdateData = {};
-        if (full_name) userUpdateData.full_name = full_name;
-        if (phone) userUpdateData.phone = phone;
-        // if (avatar_url) userUpdateData.avatar_url = avatar_url;
-    
-        if (Object.keys(userUpdateData).length > 0) {
-            await User.update(userUpdateData, {
-                where: { id: userId },
-                transaction: t
-            });
-        }
-
-        // Update table candidate_profile
-        const profileUpdateData = {
-            user_id: userId,
-            ...(headline !== undefined && { headline }),
-            ...(bio !== undefined && { bio }),
-            ...(website !== undefined && { website }),
-            ...(linkedin_url !== undefined && { linkedin_url }) // Assuming strict check, or use nullish coalescing if needed
-        };
-
-        // Kiểm tra xem đã có hồ sơ chưa
-        const existingProfile = await Candidate_profile.findOne({ 
-            where: { user_id: userId },
-            transaction: t 
+    if (Object.keys(userUpdateData).length > 0) {
+        await prisma.user.update({
+            where: { id: userId },
+            data: userUpdateData
         });
+    }
 
-        if (existingProfile) {
-            // Nếu có rồi -> Update
-            await Candidate_profile.update(profileUpdateData, {
+    // Update table candidate_profile
+    const profileUpdateData = {};
+    if (headline !== undefined) profileUpdateData.headline = headline;
+    if (bio !== undefined) profileUpdateData.bio = bio;
+    if (website !== undefined) profileUpdateData.website = website;
+    if (linkedin_url !== undefined) profileUpdateData.linkedin_url = linkedin_url;
+
+    // Kiểm tra xem đã có hồ sơ chưa
+    const existingProfile = await prisma.candidate_profile.findUnique({
+        where: { user_id: userId }
+    });
+
+    if (existingProfile) {
+        // Nếu có rồi -> Update
+        if (Object.keys(profileUpdateData).length > 0) {
+            await prisma.candidate_profile.update({
                 where: { user_id: userId },
-                transaction: t
-            });
-        } else {
-            // Nếu chưa có -> Create
-            await Candidate_profile.create(profileUpdateData, {
-                transaction: t
+                data: profileUpdateData
             });
         }
-
-        await t.commit();
-
-        // Fetch updated data to return
-        const updatedProfile = await Candidate_profile.findOne({
-            where: { user_id: userId },
-            include: [{
-                model: User,
-                as: 'user',
-                attributes: ['id', 'full_name', 'phone', 'avatar_url', 'email']
-            }],
-            attributes: ['headline', 'bio', 'website', 'linkedin_url', 'created_at', 'updated_at']
+    } else {
+        // Nếu chưa có -> Create
+        await prisma.candidate_profile.create({
+            data: { user_id: userId, ...profileUpdateData }
         });
-
-        // Format lại dữ liệu trả về cho đẹp (đổi .User thành .user)
-        return {
-            full_name: updatedProfile.user?.full_name,
-            // phone: updatedProfile.user?.phone,
-            email: updatedProfile.user?.email,
-            // avatar_url: updatedProfile.user?.avatar_url,
-            headline: updatedProfile.headline,
-            bio: updatedProfile.bio,
-            website: updatedProfile.website,
-            linkedin_url: updatedProfile.linkedin_url
-        };
-
-    } catch (error) {
-        if (!t.finished) {
-            await t.rollback();
-        }
-        throw error;
     }
+
+    // Fetch updated data to return
+    const updatedProfile = await prisma.candidate_profile.findUnique({
+        where: { user_id: userId },
+        include: {
+            user: {
+                select: { id: true, full_name: true, phone: true, avatar_url: true, email: true }
+            }
+        },
+        select: { headline: true, bio: true, website: true, linkedin_url: true, created_at: true, updated_at: true }
+    });
+
+    // Format lại dữ liệu trả về cho đẹp
+    return {
+        full_name: updatedProfile.user?.full_name,
+        email: updatedProfile.user?.email,
+        headline: updatedProfile.headline,
+        bio: updatedProfile.bio,
+        website: updatedProfile.website,
+        linkedin_url: updatedProfile.linkedin_url
+    };
 };
 
 exports.deleteProfile = async (userId, fieldsToDelete) => {
@@ -162,22 +145,10 @@ exports.deleteProfile = async (userId, fieldsToDelete) => {
         throw new Error('Không có trường hợp lệ nào để xóa');
     }
 
-    const t = await sequelize.transaction();
+    await prisma.candidate_profile.update({
+        where: { user_id: userId },
+        data: profileUpdateData
+    });
 
-    try {
-        await Candidate_profile.update(profileUpdateData, {
-            where: { user_id: userId },
-            transaction: t
-        });
-
-        await t.commit();
-
-        return exports.getProfile(userId);
-
-    } catch (error) {
-        if (!t.finished) {
-            await t.rollback();
-        }
-        throw error;
-    }
+    return exports.getProfile(userId);
 };

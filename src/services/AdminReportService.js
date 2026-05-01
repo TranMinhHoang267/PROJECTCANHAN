@@ -1,5 +1,5 @@
-const { Op, fn, col, literal } = require('sequelize');
-const { User, Job, Application, Company, sequelize } = require('../models');
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 
 // ==============================================================================
 // THỐNG KÊ TỔNG QUAN HỆ THỐNG
@@ -9,19 +9,19 @@ exports.getSystemStats = async () => {
            totalCompanies, approvedCompanies,
            totalJobs, approvedJobs,
            totalApplications, acceptedApplications] = await Promise.all([
-        User.count(),
-        User.count({ where: { role: 'candidate' } }),
-        User.count({ where: { role: 'recruiter' } }),
-        Company.count(),
-        Company.count({ where: { status: 'approved' } }),
-        Job.count(),
-        Job.count({ where: { status: 'approved' } }),
-        Application.count(),
-        Application.count({ where: { status: 'accepted' } }),
+        prisma.user.count(),
+        prisma.user.count({ where: { role: 'candidate' } }),
+        prisma.user.count({ where: { role: 'recruiter' } }),
+        prisma.company.count(),
+        prisma.company.count({ where: { status: 'approved' } }),
+        prisma.job.count(),
+        prisma.job.count({ where: { status: 'approved' } }),
+        prisma.application.count(),
+        prisma.application.count({ where: { status: 'accepted' } })
     ]);
 
-    const reviewed = await Application.count({
-        where: { status: { [Op.in]: ['accepted', 'rejected'] } }
+    const reviewed = await prisma.application.count({
+        where: { status: { in: ['accepted', 'rejected'] } }
     });
 
     return {
@@ -38,8 +38,8 @@ exports.getSystemStats = async () => {
         jobs: {
             total:    totalJobs,
             approved: approvedJobs,
-            pending:  await Job.count({ where: { status: 'pending' } }),
-            rejected: await Job.count({ where: { status: 'rejected' } })
+            pending:  await prisma.job.count({ where: { status: 'pending' } }),
+            rejected: await prisma.job.count({ where: { status: 'rejected' } })
         },
         applications: {
             total:    totalApplications,
@@ -55,21 +55,16 @@ exports.getSystemStats = async () => {
 // TĂNG TRƯỞNG USER THEO THÁNG (12 tháng gần nhất)
 // ==============================================================================
 exports.getUserGrowth = async () => {
-    const rows = await User.findAll({
-        attributes: [
-            [fn('DATE_TRUNC', 'month', col('created_at')), 'month'],
-            [fn('COUNT', col('id')), 'count'],
-            'role'
-        ],
-        where: {
-            created_at: {
-                [Op.gte]: literal("NOW() - INTERVAL '12 months'")
-            }
-        },
-        group: [literal("DATE_TRUNC('month', created_at)"), 'role'],
-        order: [[literal("DATE_TRUNC('month', created_at)"), 'ASC']],
-        raw: true
-    });
+    const rows = await prisma.$queryRaw`
+        SELECT 
+            DATE_TRUNC('month', created_at) as month,
+            role,
+            COUNT(id) as count
+        FROM users
+        WHERE created_at >= NOW() - INTERVAL '12 months'
+        GROUP BY DATE_TRUNC('month', created_at), role
+        ORDER BY month ASC
+    `;
 
     // Gom nhóm theo tháng
     const byMonth = {};
@@ -87,21 +82,16 @@ exports.getUserGrowth = async () => {
 // SỐ ĐƠN ỨNG TUYỂN / CV THEO THÁNG (12 tháng gần nhất)
 // ==============================================================================
 exports.getApplicationsByMonth = async () => {
-    const rows = await Application.findAll({
-        attributes: [
-            [fn('DATE_TRUNC', 'month', col('applied_at')), 'month'],
-            [fn('COUNT', col('id')), 'count'],
-            'status'
-        ],
-        where: {
-            applied_at: {
-                [Op.gte]: literal("NOW() - INTERVAL '12 months'")
-            }
-        },
-        group: [literal("DATE_TRUNC('month', applied_at)"), 'status'],
-        order: [[literal("DATE_TRUNC('month', applied_at)"), 'ASC']],
-        raw: true
-    });
+    const rows = await prisma.$queryRaw`
+        SELECT 
+            DATE_TRUNC('month', created_at) as month,
+            status,
+            COUNT(id) as count
+        FROM applications
+        WHERE created_at >= NOW() - INTERVAL '12 months'
+        GROUP BY DATE_TRUNC('month', created_at), status
+        ORDER BY month ASC
+    `;
 
     // Gom nhóm theo tháng
     const byMonth = {};
@@ -120,40 +110,30 @@ exports.getApplicationsByMonth = async () => {
 // TIN TUYỂN DỤNG THEO LOẠI CÔNG VIỆC (job_type)
 // ==============================================================================
 exports.getJobsByType = async () => {
-    const rows = await Job.findAll({
-        attributes: [
-            'job_type',
-            [fn('COUNT', col('id')), 'count']
-        ],
+    const rows = await prisma.job.groupBy({
+        by: ['job_type'],
         where: { status: 'approved' },
-        group: ['job_type'],
-        order: [[literal('COUNT(id)'), 'DESC']],
-        raw: true
+        _count: { id: true }
     });
 
     return rows.map(r => ({
         job_type: r.job_type || 'Khác',
-        count:    parseInt(r.count)
-    }));
+        count: r._count.id
+    })).sort((a, b) => b.count - a.count);
 };
 
 // ==============================================================================
 // TIN TUYỂN DỤNG THEO CẤP ĐỘ (job_level)
 // ==============================================================================
 exports.getJobsByLevel = async () => {
-    const rows = await Job.findAll({
-        attributes: [
-            'job_level',
-            [fn('COUNT', col('id')), 'count']
-        ],
+    const rows = await prisma.job.groupBy({
+        by: ['job_level'],
         where: { status: 'approved' },
-        group: ['job_level'],
-        order: [[literal('COUNT(id)'), 'DESC']],
-        raw: true
+        _count: { id: true }
     });
 
     return rows.map(r => ({
         job_level: r.job_level || 'Khác',
-        count:     parseInt(r.count)
-    }));
+        count: r._count.id
+    })).sort((a, b) => b.count - a.count);
 };

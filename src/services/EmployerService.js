@@ -1,15 +1,14 @@
 const path = require('path');
 const fs   = require('fs');
 const sharp = require('sharp');
-const { Op } = require('sequelize');
-const { Company, User, sequelize } = require('../models');
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 
 // Thư mục lưu logo
 const LOGO_DIR = path.join(__dirname, '../uploads/logos');
 if (!fs.existsSync(LOGO_DIR)) {
     fs.mkdirSync(LOGO_DIR, { recursive: true });
 }
-
 
 // ==============================================================================
 // PRIVATE HELPER
@@ -18,7 +17,7 @@ if (!fs.existsSync(LOGO_DIR)) {
  * Lấy Company thuộc về user (recruiter), throw nếu chưa có
  */
 const _getCompany = async (userId) => {
-    const company = await Company.findOne({ where: { user_id: userId } });
+    const company = await prisma.company.findUnique({ where: { user_id: userId } });
     if (!company) throw new Error('Bạn chưa có hồ sơ công ty. Vui lòng tạo hồ sơ.');
     return company;
 };
@@ -27,13 +26,11 @@ const _getCompany = async (userId) => {
 // 1. LẤY PROFILE CÔNG TY CỦA RECRUITER ĐANG ĐĂNG NHẬP
 // ==============================================================================
 exports.getMyCompany = async (userId) => {
-    const company = await Company.findOne({
+    const company = await prisma.company.findUnique({
         where: { user_id: userId },
-        include: [{
-            model: User,
-            as: 'user',
-            attributes: ['full_name', 'email', 'phone', 'avatar_url']
-        }]
+        include: {
+            user: { select: { full_name: true, email: true, phone: true, avatar_url: true } }
+        }
     });
 
     if (!company) return null;
@@ -64,7 +61,7 @@ exports.getMyCompany = async (userId) => {
 
 // Nếu muốn sử dụng thì bỏ comment ở dưới
 // exports.createCompany = async (userId, data) => {
-//     const existing = await Company.findOne({ where: { user_id: userId } });
+//     const existing = await prisma.company.findUnique({ where: { user_id: userId } });
 //     if (existing) throw new Error('Bạn đã có hồ sơ công ty. Hãy dùng chức năng cập nhật.');
 
 //     const { name, description, website, logo_url, address, city, size } = data;
@@ -72,16 +69,18 @@ exports.getMyCompany = async (userId) => {
 //     if (!name?.trim()) throw new Error('Tên công ty không được để trống.');
 //     if (!address?.trim()) throw new Error('Địa chỉ công ty không được để trống.');
 
-//     const company = await Company.create({
-//         user_id:     userId,
-//         name:        name.trim(),
-//         description: description?.trim() || null,
-//         website:     website?.trim()     || null,
-//         logo_url:    logo_url?.trim()    || null,
-//         address:     address.trim(),
-//         city:        city?.trim()        || null,
-//         size:        size?.trim()        || null,
-//         status:      'pending'           // Luôn bắt đầu là pending, chờ admin duyệt
+//     const company = await prisma.company.create({
+//         data: {
+//             user_id:     userId,
+//             name:        name.trim(),
+//             description: description?.trim() || null,
+//             website:     website?.trim()     || null,
+//             logo_url:    logo_url?.trim()    || null,
+//             address:     address.trim(),
+//             city:        city?.trim()        || null,
+//             size:        size?.trim()        || null,
+//             status:      'pending'           // Luôn bắt đầu là pending, chờ admin duyệt
+//         }
 //     });
 
 //     return company;
@@ -119,8 +118,12 @@ exports.updateCompany = async (userId, data) => {
         updateData.rejection_reason = null;
     }
 
-    await company.update(updateData);
-    return await Company.findByPk(company.id);
+    await prisma.company.update({
+        where: { id: company.id },
+        data: updateData
+    });
+
+    return await prisma.company.findUnique({ where: { id: company.id } });
 };
 
 // ==============================================================================
@@ -157,11 +160,15 @@ exports.updateLogo = async (userId, fileBuffer) => {
             }
         }
 
-        await company.update({ logo_url: dbLogoUrl });
+        await prisma.company.update({
+            where: { id: company.id },
+            data: { logo_url: dbLogoUrl }
+        });
+
         return dbLogoUrl;
 
     } catch (error) {
-        // Rollback: xóa file mới nếu lỡ tạo
+        // Rollback: xóa file mới nếu đã tạo
         if (newFilePath && fs.existsSync(newFilePath)) {
             fs.unlinkSync(newFilePath);
         }
@@ -190,6 +197,10 @@ exports.deleteLogo = async (userId) => {
         }
     }
 
-    await company.update({ logo_url: null });
+    await prisma.company.update({
+        where: { id: company.id },
+        data: { logo_url: null }
+    });
+
     return true;
 };

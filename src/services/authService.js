@@ -1,7 +1,9 @@
-const { User, Company, Candidate_profile, sequelize } = require('../models');
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 const { ROLES } = require('../constants/roles');
 const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = require('../utils/tokenUtils');
-const { Op } = require('sequelize');
+const bcrypt = require('bcryptjs');
+const { Op } = require('@prisma/client'); // Not used in Prisma, removing dependency
 
 /**
  * Register a new user
@@ -46,10 +48,10 @@ exports.register = async (data) => {
         throw new Error('Họ tên chỉ được chứa chữ cái và khoảng trắng');
     }
     
-    // Check conflicts (Email or Phone)
-    const existingUser = await User.findOne({
+    // Check conflicts (Email or Phone) - Prisma equivalent of Op.or
+    const existingUser = await prisma.user.findFirst({
         where: {
-            [Op.or]: [
+            OR: [
                 { email: email },
                 { phone: phone }
             ]
@@ -62,68 +64,81 @@ exports.register = async (data) => {
     }
     
     // Determine role
-let role = ROLES.CANDIDATE;
-// Nếu có nhập bất kỳ thông tin công ty nào
-if (company_name || address) {
-    // Validate: Phải nhập đủ cả 2
-    if (!company_name) {
-        throw new Error('Thiếu tên công ty. Vui lòng nhập đầy đủ thông tin công ty hoặc bỏ trống để đăng ký tài khoản ứng viên');
+    let role = ROLES.CANDIDATE;
+    // Nếu có nhập bất kỳ thông tin công ty nào
+    if (company_name || address) {
+        // Validate: Phải nhập đủ cả 2
+        if (!company_name) {
+            throw new Error('Thiếu tên công ty. Vui lòng nhập đầy đủ thông tin công ty hoặc bỏ trống để đăng ký tài khoản ứng viên');
+        }
+        if (!address) {
+            throw new Error('Thiếu địa chỉ công ty. Vui lòng nhập đầy đủ địa chỉ công ty hoặc bỏ trống để đăng ký tài khoản ứng viên');
+        }
+        role = ROLES.RECRUITER;
     }
-    if (!address) {
-        throw new Error('Thiếu địa chỉ công ty. Vui lòng nhập đầy đủ địa chỉ công ty hoặc bỏ trống để đăng ký tài khoản ứng viên');
-    }
-    role = ROLES.RECRUITER;
-}
-    const t = await sequelize.transaction();
+
+    // Hash password manually (replacing Sequelize beforeCreate hook)
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
 
     try {
-        // Create user
-        const user = await User.create({
-            email,
-            phone,
-            password,
-            full_name,
-            role: role
-        }, { transaction: t });
+        // Use Prisma transaction
+        const result = await prisma.$transaction(async (tx) => {
+            // Create user
+            const user = await tx.user.create({
+                data: {
+                    email,
+                    phone,
+                    password: hashedPassword,
+                    fullName: full_name,
+                    role: role
+                }
+            });
 
-        // Create profile based on role
-        if (role === ROLES.CANDIDATE) {
-            await Candidate_profile.create({
-                user_id: user.id
-            }, { transaction: t }); 
-        }
+            // Create profile based on role
+            if (role === ROLES.CANDIDATE) {
+                await tx.candidateProfile.create({
+                    data: {
+                        userId: user.id
+                    }
+                });
+            }
 
-        if (role === ROLES.RECRUITER) {
-        await Company.create({
-            user_id: user.id,
-            name:    company_name.trim(),
-            address: address.trim(),
-            status:  'pending'
-        }, { transaction: t });
-    }
+            if (role === ROLES.RECRUITER) {
+                await tx.company.create({
+                    data: {
+                        userId: user.id,
+                        name: company_name,
+                        address: address,
+                        status: 'pending'
+                    }
+                });
+            }
 
-        // Generate tokens
-        const accessToken = generateAccessToken(user.id, user.role);
-        const refreshToken = generateRefreshToken(user.id);
+            // Generate tokens
+            const accessToken = generateAccessToken(user.id, user.role);
+            const refreshToken = generateRefreshToken(user.id);
 
-        // Save refresh token
-        user.refresh_token = refreshToken;
-        await user.save({ transaction: t });
+            // Save refresh token
+            await tx.user.update({
+                where: { id: user.id },
+                data: { refreshToken: refreshToken }
+            });
 
-        await t.commit();
+            return {
+                id: user.id,
+                email: user.email,
+                phone: user.phone,
+                full_name: user.fullName,
+                role: user.role,
+                accessToken,
+                refreshToken
+            };
+        });
 
-        return {
-            id: user.id,
-            email: user.email,
-            phone: user.phone,
-            full_name: user.full_name,
-            role: user.role,
-            accessToken,
-            refreshToken
-        };
+        return result;
 
     } catch (error) {
-        await t.rollback();
         throw error;
     }
 };
@@ -134,38 +149,38 @@ if (company_name || address) {
  * @returns {Promise<Object>} User info and tokens
  */
 exports.login = async ({ email, password }) => {
-    const user = await User.findOne({ where: { email } });
+    const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
         throw new Error('Email hoặc mật khẩu không đúng');
     }
 
-
-    const isMatch = await user.matchPassword(password);
+    // Replace instance method matchPassword with direct bcrypt.compare
+    const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
         throw new Error('Mật khẩu không đúng');
     }
 
-    
     // Generate tokens
     const accessToken = generateAccessToken(user.id, user.role);
     const refreshToken = generateRefreshToken(user.id);
 
-    // Save refresh token to DB
-    user.refresh_token = refreshToken;
-    await user.save();
+    // Save refresh token to DB (replacing user.save())
+    await prisma.user.update({
+        where: { id: user.id },
+        data: { refreshToken: refreshToken }
+    });
 
     return {
-    id:           user.id,
-    email:        user.email,
-    phone:        user.phone,
-    full_name:    user.full_name,
-    role:         user.role,
-    avatar_url:   user.avatar_url || null,
-    accessToken,
-    refreshToken
-};
-
+        id: user.id,
+        email: user.email,
+        phone: user.phone,
+        full_name: user.fullName,
+        role: user.role,
+        avatar_url: user.avatarUrl || null,
+        accessToken,
+        refreshToken
+    };
 };
 
 /**
@@ -176,9 +191,9 @@ exports.login = async ({ email, password }) => {
 exports.refreshToken = async (refreshToken) => {
     try {
         const decoded = verifyRefreshToken(refreshToken);
-        const user = await User.findByPk(decoded.id);
+        const user = await prisma.user.findUnique({ where: { id: decoded.id } });
 
-        if (!user || user.refresh_token !== refreshToken) {
+        if (!user || user.refreshToken !== refreshToken) {
             throw new Error('Refresh token không hợp lệ hoặc đã hết hạn');
         }
 
@@ -195,6 +210,9 @@ exports.refreshToken = async (refreshToken) => {
  */
 exports.logout = async (user) => {
     if (user) {
-        await user.save();
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { refreshToken: null }
+        });
     }
 };

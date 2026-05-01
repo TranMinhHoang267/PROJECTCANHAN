@@ -1,4 +1,6 @@
-const { Company, Job, Skill, Job_skill, sequelize } = require('../models');
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
+
 // ==============================================================================
 // PRIVATE HELPERS
 // ==============================================================================
@@ -6,44 +8,52 @@ const { Company, Job, Skill, Job_skill, sequelize } = require('../models');
  * Lấy company của recruiter, throw nếu chưa có hoặc chưa được duyệt
  */
 const _getApprovedCompany = async (userId) => {
-    const company = await Company.findOne({ where: { user_id: userId } });
+    const company = await prisma.company.findUnique({ where: { user_id: userId } });
     if (!company) throw new Error('Bạn chưa có hồ sơ công ty.');
     if (company.status !== 'approved') throw new Error('Hồ sơ công ty chưa được Admin duyệt. Bạn chưa thể đăng tin.');
     return company;
 };
 
 const _getOwnJob = async (userId, jobId) => {
-    const company = await Company.findOne({ where: { user_id: userId } });
+    const company = await prisma.company.findUnique({ where: { user_id: userId } });
     if (!company) throw new Error('Bạn chưa có hồ sơ công ty.');
 
-    const job = await Job.findOne({
+    const job = await prisma.job.findFirst({
         where: { id: jobId, company_id: company.id },
-        include: [{ model: Skill, as: 'skills', through: { attributes: [] } }]
+        include: {
+            skills: {
+                include: { skill: { select: { id: true, name: true } } }
+            },
+            company: true
+        }
     });
     if (!job) throw new Error('Không tìm thấy tin đăng hoặc bạn không có quyền thao tác.');
+    
+    // Transform skills to match old Sequelize format
+    job.skills = job.skills.map(js => js.skill);
     return job;
 };
 
 // Helper dùng chung cho createJob và updateJob
-const _attachSkills = async (job, skills, transaction) => {
+const _attachSkills = async (jobId, skills) => {
     const skillIds = [];
     for (const name of skills) {
         const cleanName = name.trim();
         if (!cleanName) continue;
-        const [skill] = await Skill.findOrCreate({
-            where:    { name: cleanName },
-            defaults: { name: cleanName },
-            transaction
+        const skill = await prisma.skill.upsert({
+            where: { name: cleanName },
+            update: {},
+            create: { name: cleanName }
         });
-        skillIds.push(skill.id);
+        skillIds.push({ skill_id: skill.id });
     }
 
-    // Fix error
-    await Job_skill.destroy({ where: { job_id: job.id }, transaction });
-    await Job_skill.bulkCreate(
-        skillIds.map(skill_id => ({ job_id: job.id, skill_id })),
-        { transaction }
-    );
+    await prisma.job_skill.deleteMany({ where: { job_id: jobId } });
+    if (skillIds.length > 0) {
+        await prisma.job_skill.createMany({
+            data: skillIds.map(s => ({ job_id: jobId, skill_id: s.skill_id }))
+        });
+    }
 };
 
 // ==============================================================================
@@ -60,64 +70,71 @@ exports.createJob = async (userId, data) => {
 
     if (!title?.trim()) throw new Error('Tiêu đề công việc không được để trống.');
 
-    const t = await sequelize.transaction();
-    try {
-        const job = await Job.create({
-            company_id:   company.id,
-            title:        title.trim(),
-            description:  description?.trim()  || null,
+    const job = await prisma.job.create({
+        data: {
+            company_id: company.id,
+            title: title.trim(),
+            description: description?.trim() || null,
             requirements: requirements?.trim() || null,
-            benefits:     benefits?.trim()     || null,
-            salary_min:   salary_min           || null,
-            salary_max:   salary_max           || null,
-            location:     location?.trim()     || null,
-            job_type:     job_type?.trim()     || null,
-            job_level:    job_level?.trim()    || null,
-            deadline:     deadline             || null,
-            status:       'pending'
-        }, { transaction: t });
-
-        // Dùng helper thay vì require lồng bên trong
-        if (skills.length > 0) {
-            await _attachSkills(job, skills, t);
+            benefits: benefits?.trim() || null,
+            salary_min: salary_min || null,
+            salary_max: salary_max || null,
+            location: location?.trim() || null,
+            job_type: job_type?.trim() || null,
+            job_level: job_level?.trim() || null,
+            deadline: deadline || null,
+            status: 'pending'
         }
+    });
 
-        await t.commit();
-        return job;
-    } catch (err) {
-        await t.rollback();
-        throw err;
+    // Attach skills
+    if (skills.length > 0) {
+        await _attachSkills(job.id, skills);
     }
+
+    return await _getOwnJob(userId, job.id);
 };
 
 // ==============================================================================
 // 2. DANH SÁCH TIN ĐĂNG CỦA CÔNG TY
 // ==============================================================================
 exports.getMyJobs = async (userId, filters = {}) => {
-    const company = await Company.findOne({ where: { user_id: userId } });
+    const company = await prisma.company.findUnique({ where: { user_id: userId } });
     if (!company) throw new Error('Bạn chưa có hồ sơ công ty.');
 
-    const pageSize   = Math.min(50, Math.max(1, parseInt(filters.limit) || 10));
+    const pageSize = Math.min(50, Math.max(1, parseInt(filters.limit) || 10));
     const pageNumber = Math.max(1, parseInt(filters.page) || 1);
-    const offset     = (pageNumber - 1) * pageSize;
+    const skip = (pageNumber - 1) * pageSize;
 
     const where = { company_id: company.id };
     if (filters.status) where.status = filters.status;
 
-    const { count, rows } = await Job.findAndCountAll({
-        where,
-        include: [{ model: Skill, as: 'skills', through: { attributes: [] }, attributes: ['id', 'name'] }],
-        order:    [['createdAt', 'DESC']],
-        limit:    pageSize,
-        offset,
-        distinct: true
-    });
+    const [count, jobs] = await Promise.all([
+        prisma.job.count({ where }),
+        prisma.job.findMany({
+            where,
+            include: {
+                skills: {
+                    include: { skill: { select: { id: true, name: true } } }
+                }
+            },
+            orderBy: { created_at: 'desc' },
+            take: pageSize,
+            skip
+        })
+    ]);
+
+    // Transform skills
+    const transformedJobs = jobs.map(job => ({
+        ...job,
+        skills: job.skills.map(js => js.skill)
+    }));
 
     return {
-        total_items:  count,
-        total_pages:  Math.ceil(count / pageSize),
+        total_items: count,
+        total_pages: Math.ceil(count / pageSize),
         current_page: pageNumber,
-        jobs:         rows
+        jobs: transformedJobs
     };
 };
 
@@ -148,44 +165,34 @@ exports.updateJob = async (userId, jobId, data) => {
         throw new Error('Tiêu đề công việc không được để trống.');
     }
 
-    const t = await sequelize.transaction();
-    try {
-        const updateData = {};
-        if (title        !== undefined) updateData.title        = title.trim();
-        if (description  !== undefined) updateData.description  = description?.trim()  || null;
-        if (requirements !== undefined) updateData.requirements = requirements?.trim() || null;
-        if (benefits     !== undefined) updateData.benefits     = benefits?.trim()     || null;
-        if (salary_min   !== undefined) updateData.salary_min   = salary_min;
-        if (salary_max   !== undefined) updateData.salary_max   = salary_max;
-        if (location     !== undefined) updateData.location     = location?.trim()     || null;
-        if (job_type     !== undefined) updateData.job_type     = job_type?.trim()     || null;
-        if (job_level    !== undefined) updateData.job_level    = job_level?.trim()    || null;
-        if (deadline     !== undefined) updateData.deadline     = deadline;
+    const updateData = {};
+    if (title !== undefined) updateData.title = title.trim();
+    if (description !== undefined) updateData.description = description?.trim() || null;
+    if (requirements !== undefined) updateData.requirements = requirements?.trim() || null;
+    if (benefits !== undefined) updateData.benefits = benefits?.trim() || null;
+    if (salary_min !== undefined) updateData.salary_min = salary_min;
+    if (salary_max !== undefined) updateData.salary_max = salary_max;
+    if (location !== undefined) updateData.location = location?.trim() || null;
+    if (job_type !== undefined) updateData.job_type = job_type?.trim() || null;
+    if (job_level !== undefined) updateData.job_level = job_level?.trim() || null;
+    if (deadline !== undefined) updateData.deadline = deadline;
 
-        if (Object.keys(updateData).length > 0 && job.status !== 'paused') {
-            updateData.status           = 'pending';
-            updateData.rejection_reason = null;
-        }
-
-        await job.update(updateData, { transaction: t });
-
-        // Dùng helper thay vì require lồng bên trong
-        if (Array.isArray(skills) && skills.length > 0) {
-            await _attachSkills(job, skills, t);
-        }
-
-        await t.commit();
-
-        // Reload lại job sau update thay vì gọi _getOwnJob tốn thêm query
-        await job.reload({
-            include: [{ model: Skill, as: 'skills', through: { attributes: [] } }]
-        });
-        return job;
-
-    } catch (err) {
-        await t.rollback();
-        throw err;
+    if (Object.keys(updateData).length > 0 && job.status !== 'paused') {
+        updateData.status = 'pending';
+        updateData.rejection_reason = null;
     }
+
+    await prisma.job.update({
+        where: { id: jobId },
+        data: updateData
+    });
+
+    // Update skills
+    if (Array.isArray(skills) && skills.length > 0) {
+        await _attachSkills(jobId, skills);
+    }
+
+    return await _getOwnJob(userId, jobId);
 };
 
 // ==============================================================================
@@ -194,14 +201,20 @@ exports.updateJob = async (userId, jobId, data) => {
 exports.togglePauseJob = async (userId, jobId) => {
     const job = await _getOwnJob(userId, jobId);
 
-    if (job.status === 'pending')  throw new Error('Tin đang chờ duyệt. Không thể tạm dừng lúc này.');
+    if (job.status === 'pending') throw new Error('Tin đang chờ duyệt. Không thể tạm dừng lúc này.');
     if (job.status === 'rejected') throw new Error('Tin đã bị từ chối. Không thể tạm dừng.');
 
     if (job.status === 'paused') {
-        await job.update({ status: 'approved' });
+        await prisma.job.update({
+            where: { id: jobId },
+            data: { status: 'approved' }
+        });
         return { status: 'approved', message: 'Đã mở lại tin tuyển dụng.' };
     } else {
-        await job.update({ status: 'paused' });
+        await prisma.job.update({
+            where: { id: jobId },
+            data: { status: 'paused' }
+        });
         return { status: 'paused', message: 'Đã tạm dừng tin tuyển dụng.' };
     }
 };
@@ -211,6 +224,6 @@ exports.togglePauseJob = async (userId, jobId) => {
 // ==============================================================================
 exports.deleteJob = async (userId, jobId) => {
     const job = await _getOwnJob(userId, jobId);
-    await job.destroy();
+    await prisma.job.delete({ where: { id: jobId } });
     return true;
 };

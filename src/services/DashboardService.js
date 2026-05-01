@@ -1,17 +1,21 @@
-const { Company, Job, Application, sequelize } = require('../models');
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
 
 // ==============================================================================
 // DASHBOARD THỐNG KÊ CHO RECRUITER
 // ==============================================================================
 exports.getDashboard = async (userId) => {
-    const company = await Company.findOne({ where: { user_id: userId } });
+    const company = await prisma.company.findUnique({ where: { user_id: userId } });
     if (!company) throw new Error('Bạn chưa có hồ sơ công ty.');
 
     const companyId = company.id;
 
     // Lấy tất cả job ids
-    const allJobs = await Job.findAll({ where: { company_id: companyId }, attributes: ['id', 'status'] });
-    const jobIds  = allJobs.map(j => j.id);
+    const allJobs = await prisma.job.findMany({ 
+        where: { company_id: companyId }, 
+        select: { id: true, status: true } 
+    });
+    const jobIds = allJobs.map(j => j.id);
 
     // --- THỐNG KÊ TIN ĐĂNG ---
     const jobStats = {
@@ -34,35 +38,35 @@ exports.getDashboard = async (userId) => {
     }
 
     // --- THỐNG KÊ ĐƠN ỨNG TUYỂN ---
-    const allApps = await Application.findAll({
-        where: { job_id: jobIds },
-        attributes: ['id', 'status', 'applied_at']
+    const allApps = await prisma.application.findMany({
+        where: { job_id: { in: jobIds } },
+        select: { id: true, status: true, applied_at: true }
     });
 
     const appStats = {
-        total:       allApps.length,
-        submitted:   allApps.filter(a => a.status === 'submitted').length,
-        under_review: allApps.filter(a => a.status === 'under_review').length,
-        interview:   allApps.filter(a => a.status === 'interview').length,
-        accepted:    allApps.filter(a => a.status === 'accepted').length,
-        rejected:    allApps.filter(a => a.status === 'rejected').length
+        total:         allApps.length,
+        submitted:     allApps.filter(a => a.status === 'submitted').length,
+        under_review:   allApps.filter(a => a.status === 'under_review').length,
+        interview:       allApps.filter(a => a.status === 'interview').length,
+        accepted:        allApps.filter(a => a.status === 'accepted').length,
+        rejected:        allApps.filter(a => a.status === 'rejected').length
     };
 
     // --- TỶ LỆ TUYỂN THÀNH CÔNG ---
-    const reviewed = appStats.accepted + appStats.rejected;  // Đã xử lý (bỏ trừ các đơn pending)
+    const reviewed = appStats.accepted + appStats.rejected; // Đã xử lý (bỏ trừ các đơn pending)
     const successRate = reviewed > 0
         ? `${Math.round((appStats.accepted / reviewed) * 100)}%`
         : '0%';
 
     // --- 5 ĐƠN ỨNG TUYỂN MỚI NHẤT ---
-    const recent = await Application.findAll({
-        where: { job_id: jobIds },
-        include: [
-            { model: require('../models').User, as: 'candidate', attributes: ['full_name', 'email', 'avatar_url'] },
-            { model: require('../models').Job,  as: 'job',       attributes: ['title'] }
-        ],
-        order: [['applied_at', 'DESC']],
-        limit: 5
+    const recent = await prisma.application.findMany({
+        where: { job_id: { in: jobIds } },
+        include: {
+            candidate: { select: { full_name: true, email: true, avatar_url: true } },
+            job:       { select: { title: true } }
+        },
+        orderBy: { applied_at: 'desc' },
+        take: 5
     });
 
     return {
