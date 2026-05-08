@@ -1,6 +1,6 @@
 model ResumeVectors {
-    id        String                 @id @default(uuid())
-    resumeId  String                 @map("resume_id")
+    id        String                 @id @default(uuid()) @db.Uuid
+    resumeId  String                 @map("resume_id") @db.Uuid
     content   String                 @db.Text
     embedding Unsupported("vector")?
     createdAt DateTime               @default(now()) @map("created_at")
@@ -14,8 +14,8 @@ model ResumeVectors {
 }
 
 model JobVectors {
-    id        String                 @id @default(uuid())
-    jobId     String                 @map("job_id")
+    id        String                 @id @default(uuid()) @db.Uuid
+    jobId     String                 @map("job_id") @db.Uuid
     content   String                 @db.Text
     embedding Unsupported("vector")?
     createdAt DateTime               @default(now()) @map("created_at")

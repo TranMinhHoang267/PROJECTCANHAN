@@ -1,6 +1,6 @@
 model Resume {
-  id         String   @id @default(uuid())
-  userId     String   @map("user_id")
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
   title      String
   fileUrl    String   @map("file_url")
   isDefault  Boolean  @default(false) @map("is_default")
@@ -16,10 +16,10 @@ model Resume {
 }
 
 model Application {
-  id            String   @id @default(uuid())
-  jobId         String   @map("job_id")
-  userId        String   @map("user_id")
-  companyId     String?  @map("company_id")
+  id            String   @id @default(uuid()) @db.Uuid
+  jobId         String   @map("job_id") @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  companyId     String?  @map("company_id") @db.Uuid
   fullName      String   @map("full_name")
   email         String
   phone         String
@@ -39,9 +39,9 @@ model Application {
 }
 
 model Bookmark {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  jobId     String   @map("job_id")
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  jobId     String   @map("job_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at")
 
   // Relations

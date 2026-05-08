@@ -1,7 +1,7 @@
 /**
  * using @xenova/transformers to generate text embeddings for job descriptions and other relevant information. 
  * This will allow us to create a vector representation of the job data, which can be used for various downstream tasks such as similarity search, clustering, or as input features for machine learning models.
- * The getEmbedding function takes a text input, processes it through the feature extraction pipeline using a pre-trained model (in this case, 'Xenova/paraphrase-multilingual-MiniLM-L12-v2'), and returns the resulting embedding as an array of numbers.
+ * The textEmbedding function takes a text input, processes it through the feature extraction pipeline using a pre-trained model (in this case, 'Xenova/paraphrase-multilingual-MiniLM-L12-v2'), and returns the resulting embedding as an array of numbers.
  * This embedding can then be stored in a database or used directly for tasks like job matching or recommendation systems.
  */
 require('dotenv').config();
@@ -17,7 +17,7 @@ const client = new InferenceClient(process.env.HF_TOKEN);
  * @returns 
  */
 
-const getEmbedding = async (text) => {
+const textEmbedding = async (text) => {
   const maxRetries = 3;
   const baseDelay = 1000;
 
@@ -43,5 +43,5 @@ const getEmbedding = async (text) => {
 };
 
 module.exports = {
-  getEmbedding,
+  textEmbedding,
 };

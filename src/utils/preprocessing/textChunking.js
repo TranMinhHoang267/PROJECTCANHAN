@@ -6,6 +6,10 @@
  */
 const maxChunkSize = 300; // Adjust based on your embedding model's limits
 const overlapSize = 50; // To ensure some context is preserved between chunks
+/**
+ * 
+ * @param {String} text 
+ */
 const textChunking = (text) => {
   if (typeof text !== "string") return [];
   if (text.length <= maxChunkSize) return [text.trim()];

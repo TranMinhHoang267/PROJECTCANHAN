@@ -6,8 +6,8 @@ enum VECTOR_STATUS {
 }
 
 model Job {
-  id              String        @id @default(uuid())
-  companyId       String        @map("company_id")
+  id              String        @id @default(uuid()) @db.Uuid
+  companyId       String        @map("company_id") @db.Uuid
   title           String
   description     String?       @db.Text
   requirements    String?       @db.Text
@@ -37,8 +37,8 @@ model Job {
 }
 
 model Job_skill {
-  jobId   String @map("job_id")
-  skillId String @map("skill_id")
+  jobId   String @map("job_id") @db.Uuid
+  skillId String @map("skill_id") @db.Uuid
 
   job   Job   @relation("JobToJobSkill", fields: [jobId], references: [id], onDelete: Cascade)
   skill Skill @relation("SkillToJobSkill", fields: [skillId], references: [id], onDelete: Cascade)
@@ -49,7 +49,7 @@ model Job_skill {
 }
 
 model Skill {
-  id   String @id @default(uuid())
+  id   String @id @default(uuid()) @db.Uuid
   name String @unique
 
   // Relations

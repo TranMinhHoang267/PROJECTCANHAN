@@ -9,7 +9,7 @@ const crypto = require("crypto");
 
 const { cleaningText } = require("../utils/preprocessing/textCleaner");
 const { textChunking } = require("../utils/preprocessing/textChunking");
-const { getEmbedding } = require("../utils/preprocessing/textEmbedding");
+const { textEmbedding } = require("../utils/preprocessing/textEmbedding");
 const {
   textStandardization,
 } = require("../utils/preprocessing/textStandardization");
@@ -123,7 +123,7 @@ async function processAndStoreJobVector(job) {
   // Step 4: Generate embeddings for each chunk using the embedding model
   let chunkEmbeddings = [];
   for (const chunk of chunks) {
-    const embedding = await getEmbedding(chunk);
+    const embedding = await textEmbedding(chunk);
     if (!embedding) {
       throw new Error(
         `Failed to generate embedding for a chunk in Job ${job.id}`,
