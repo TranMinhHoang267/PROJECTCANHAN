@@ -50,7 +50,7 @@ const adminReportRoutes = require("./src/routes/AdminReportRoutes");
 const adminRoutes = require("./src/routes/adminRoutes");
 const searchJobRoutes = require("./src/routes/Search_jobRoutes");
 const jobChatRoutes = require('./src/routes/jobChat.routers');
-const { setupVectorSchedule } = require("./src/scheduler/jobVectorRetry");
+const { setupVectorSchedule } = require("./src/scheduler/vectorRetry.scheduler");
 // Router công khai
 const publicRoutes = require("./src/routes/PublicRoutes");
 // Routes

@@ -50,7 +50,7 @@ beforeAll(async () => {
 afterAll(async () => {
   if (server) await new Promise(r => server.close(r));
   try {
-    const { stopVectorSchedule } = require('../../src/scheduler/jobVectorRetry');
+    const { stopVectorSchedule } = require('../../src/scheduler/vectorRetry.scheduler');
     if (stopVectorSchedule) await stopVectorSchedule();
   } catch (e) {}
   await new Promise(resolve => setTimeout(resolve, 500));

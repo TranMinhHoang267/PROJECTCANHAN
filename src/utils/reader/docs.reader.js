@@ -4,19 +4,19 @@
 const fs = require("fs");
 const path = require("path");
 const { PDFParse } = require("pdf-parse");
+const process = require("process");
 /**
  *
  * @param {*} filePath
  * @returns {Promise<string>}
  */
 async function pdfReader(filePath) {
-  const fullPath = path.resolve(__dirname, filePath);
-    
-    if (!fs.existsSync(fullPath)) {
-      throw new Error(`Không tìm thấy file tại: ${fullPath}`);
-    }
+  const fullPath = path.resolve(process.cwd(), filePath);
+  if (!fs.existsSync(fullPath)) {
+    throw new Error(`Không tìm thấy file tại: ${fullPath}`);
+  }
 
-    const dataBuffer = fs.readFileSync(fullPath);
+  const dataBuffer = fs.readFileSync(fullPath);
   const data = new PDFParse(dataBuffer);
   return (await data.getText()).text;
 }

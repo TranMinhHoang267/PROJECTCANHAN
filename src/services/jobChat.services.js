@@ -6,7 +6,6 @@ const {
   textStandardization,
 } = require("../utils/preprocessing/textStandardization");
 const process = require("node:process");
-const { pdfReader } = require("../utils/reader/docs.reader");
 /**
  * This service will:
  * - Clean and standardize question from client (user).
@@ -68,6 +67,10 @@ exports.chat = async (question, userId, resumeId) => {
           type,
           userId,
         );
+      case 4:
+        return await _handleResearchCompany(refined_question, entities);
+      case 5:
+        return await _handleGeeting(refined_question);
       default:
         return "Tính năng này đang được phát triển. Vui lòng thử lại sau.";
     }
@@ -97,13 +100,14 @@ exports.history = async (userId) => {
  * @param {*} type
  * @param {*} userId
  */
-async function _handleComparison(refined_question, entities, type, userId) {
+const _handleComparison = async (refined_question, entities, type, userId) => {
   if (type === "COMPANY") {
     const results = await prisma.company.findMany({
       where: {
-        name: {
-          in: entities,
-        },
+        // @ts-ignore
+        OR: entities.map((name) => ({
+          name: { contains: name, mode: "insensitive" },
+        })),
       },
       select: {
         id: true,
@@ -133,9 +137,10 @@ async function _handleComparison(refined_question, entities, type, userId) {
   if (type === "JOB") {
     const jobs = await prisma.job.findMany({
       where: {
-        title: {
-          in: entities,
-        },
+        // @ts-ignore
+        OR: entities.map((name) => ({
+          title: { contains: name, mode: "insensitive" },
+        })),
       },
       select: {
         id: true,
@@ -183,72 +188,81 @@ async function _handleComparison(refined_question, entities, type, userId) {
   if (type === "CV_VS_JOB") {
     const resume = await prisma.resume.findFirst({
       where: { userId: userId },
-      select: {
-        fileUrl: true,
-      },
+      select: { id: true, vectorStatus: true },
     });
 
-    if (!resume) {
-      return "Vui lòng chọn một CV để tiếp tục.";
+    if (!resume || resume.vectorStatus !== "COMPLETED") {
+      return "CV của bạn đang được xử lý hoặc chưa được tải lên. Vui lòng đợi trong giây lát.";
     }
 
-    const text = await pdfReader(resume.fileUrl);
-
+    // 2. Tìm Job mục tiêu
     const job = await prisma.job.findFirst({
       where: {
-        title: {
-          in: entities,
-        },
+        // @ts-ignore
+        OR: entities.map((name) => ({
+          title: { contains: name, mode: "insensitive" }, // Dùng contains thay vì in: (Sửa lỗi H2)
+        })),
       },
-      select: {
-        id: true,
-        company: {
-          select: {
-            name: true,
-          },
-        },
-        title: true,
-        description: true,
-        benefits: true,
-        salary_min: true,
-        salary_max: true,
-        location: true,
-        job_type: true,
-        jobLevel: true,
-        skills: {
-          select: {
-            skill: {
-              select: {
-                name: true,
-              },
-            },
-          },
-        },
-      },
+      include: { company: true, skills: { include: { skill: true } } },
     });
-    if (!job) {
-      return "Không có công việc bạn đang tìm hiểu.";
+
+    if (!job) return "Không tìm thấy thông tin công việc cụ thể để đánh giá.";
+
+    // 3. SO SÁNH VECTOR: Lấy các đoạn CV liên quan nhất đến Job này (Sửa lỗi H3)
+    // Giả sử bạn đã có vector của Job (đã lưu lúc tạo Job hoặc tạo mới tại đây)
+    const jobVectors = await prisma.$queryRaw`
+    SELECT embedding::text FROM "job_vectors" 
+    WHERE job_id = ${job.id}
+  `;
+
+    // @ts-ignore
+    if (!jobVectors || jobVectors.length === 0) {
+      return "Không tìm thấy dữ liệu vector cho công việc này.";
     }
+    // @ts-ignore
+    const parsedEmbeddings = jobVectors.map((jv) =>
+      JSON.parse(jv.embedding.replace("[", "[").replace("]", "]")),
+    );
+
+    // @ts-ignore
+    const jobEmbedding = parsedEmbeddings[0].map(
+      // @ts-ignore
+      (_, i) =>
+        // @ts-ignore
+        parsedEmbeddings.reduce((sum, v) => sum + v[i], 0) /
+        parsedEmbeddings.length,
+    );
+
+    // Gọi hàm lấy chunk CV liên quan
+    const relevantCvText = await _getRelevantResumeChunks(
+      resume.id,
+      jobEmbedding,
+    );
 
     const cleanResults = {
-      id: job.id,
       "Vị trí": job.title,
       "Công ty": job.company.name,
-      "Mức lương": `${job.salary_min} - ${job.salary_max} USD`,
-      "Địa điểm": `${job.location}`,
-      "Mô tả": job.description,
-      "Loại việc làm": job.job_type,
-      "Trình độ": job.jobLevel,
-      "Kỹ năng": job.skills.map((skill) => skill),
+      "Yêu cầu & Mô tả": job.description,
+      "Kỹ năng yêu cầu": job.skills.map((s) => s.skill.name).join(", "),
     };
-    const prompt = `Danh sách công việc (Dưới dạng JSON):\n${JSON.stringify(cleanResults, null, 2)}\n\n
-    CV của người dùng:\n${text}\n\n
-    Câu hỏi của người dùng:\n${refined_question}\n\n`;
+
+    // 4. Tạo Prompt an toàn về Token
+    const prompt = `Bạn là chuyên gia tuyển dụng. Hãy đánh giá sự phù hợp giữa CV và Job sau:
+    
+    YÊU CẦU CÔNG VIỆC:
+    ${JSON.stringify(cleanResults, null, 2)}
+
+    CÁC PHẦN LIÊN QUAN TRONG CV NGƯỜI DÙNG:
+    ${relevantCvText}
+
+    CÂU HỎI: ${refined_question}
+    Hãy trả lời ngắn gọn, tập trung vào sự khớp nhau về kỹ năng và kinh nghiệm.`;
+
     const response = await textGeneration(prompt, 0);
     return response;
   }
   return "Có lỗi xảy ra trong quá trình xử lý. Vui lòng thử lại sau.";
-}
+};
 
 /**
  * get the newest answer from history chat
@@ -346,6 +360,26 @@ const _handleJobSearchByCV = async (question, userId, resumeId) => {
     return "Vui lòng chọn một CV để tiếp tục.";
   }
   //first, we need to get the user's CV as vector embedding
+  const resume = await prisma.resume.findFirst({
+    where: { userId: userId },
+    select: {
+      vectorStatus: true,
+    },
+  });
+
+  if (!resume) {
+    return "CV không tồn tại hoặc đã bị xóa";
+  }
+  if (
+    resume.vectorStatus === "PENDING" ||
+    resume.vectorStatus === "PROCESSING"
+  ) {
+    return "CV đang được xử lý. Vui lòng đợi trong giây lát ";
+  }
+
+  if (resume.vectorStatus === "FAILED") {
+    return "Quá trình phân tích CV gặp lỗi. Bạn hãy thử upload lại bản CV khác xem sao.";
+  }
 
   const vectors = await prisma.$queryRaw`
     SELECT embedding
@@ -364,33 +398,39 @@ const _handleJobSearchByCV = async (question, userId, resumeId) => {
     process.env.MIN_SIMILARITY_SCORE || "0.3",
   ); // You can adjust this threshold based on your needs
   // @ts-ignore
-  const resumeEmbeddings = `[${vectors.join(",")}]`;
+  const resumeEmbeddings = vectors.map((v) => `[${v.embedding.join(",")}]`);
   const results = await prisma.$queryRaw`
-  SELECT DISTINCT ON (j.id)
-    j.id, 
-    j.title, 
-    j.salary_min as "salaryMin", 
-    j.salary_max as "salaryMax", 
-    c.name as "companyName",
-    -- Lấy giá trị tương đồng cao nhất của Job này so với bất kỳ đoạn CV nào
-    MAX(1 - (jv.embedding <=> ANY(${resumeEmbeddings}::vector[]))) AS similarity
-  FROM "jobs" j
-  JOIN "job_vectors" jv ON j.id = jv.job_id
+  SELECT DISTINCT ON (j.id) 
+    j.id, j.title, j.salary_min as "salaryMin", j.salary_max as "salaryMax", 
+    j.location, j.description, j.job_type,
+    j.location, j.job_level, 
+    c.name as "companyName", 
+    c.address as "companyAddress", 
+    c.city as "companyCity",      
+    jv.similarity
+  FROM jobs j
+  CROSS JOIN LATERAL (
+    SELECT MAX(1 - (jv.embedding <=> rv.embedding)) AS similarity
+    FROM job_vectors jv
+    CROSS JOIN LATERAL unnest(${resumeEmbeddings}::vector[]) AS rv(embedding)
+    WHERE jv.job_id = j.id
+  ) jv ON true
   JOIN "companies" c ON j.company_id = c.id
-  GROUP BY j.id, c.name, jv.embedding -- Cần group by khi dùng MAX
-  HAVING MAX(1 - (jv.embedding <=> ANY(${resumeEmbeddings}::vector[]))) > ${MIN_SIMILARITY_SCORE}
-  ORDER BY j.id, similarity DESC
+  WHERE jv.similarity > ${MIN_SIMILARITY_SCORE}
+  ORDER BY j.id, jv.similarity DESC
   LIMIT 5;
 `;
-
   // @ts-ignore
   const cleanResults = results.map((job, index) => ({
     "Công việc số:": index + 1,
     id: job.id,
     "Vị trí": job.title,
+    "Loại công việc": job.job_type,
+    "Trình độ": job.job_level,
     "Công ty": job.companyName,
     "Mức lương": `${job.salaryMin} - ${job.salaryMax} USD`,
-    "Địa điểm": `${job.companyAddress ?? ""}, ${job.companyCity}`,
+    "Địa điểm": `${job.locaion ?? ""}`,
+    "Địa chỉ": `${job.companyAddress ?? ""}, ${job.companyCity}`,
     "Mô tả": job.description,
     "Độ phù hợp": Math.round(job.similarity * 100) + "%",
   }));
@@ -398,3 +438,135 @@ const _handleJobSearchByCV = async (question, userId, resumeId) => {
   const response = await textGeneration(prompt, 0);
   return response;
 };
+/**
+ *
+ * @param {*} refined_question
+ * @param {*} entities
+ * @returns
+ */
+const _handleResearchCompany = async (refined_question, entities) => {
+  //find all information of the company
+  const company = await prisma.company.findFirst({
+    where: {
+      // @ts-ignore
+      OR: entities.map((name) => ({
+        name: { contains: name, mode: "insensitive" },
+      })),
+    },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      website: true,
+      address: true,
+      city: true,
+      jobs: {
+        select: {
+          id: true,
+          title: true,
+          description: true,
+        },
+      },
+    },
+  });
+
+  if (!company) {
+    return "Không tìm thấy thông tin về công ty.";
+  }
+  //now re-format result
+  const cleanCompanyInfo = {
+    id: company.id,
+    Tên: company.name,
+    "Mô tả": company.description,
+    Website: company.website,
+    "Địa chỉ": company.address,
+    "Thành phố": company.city,
+  };
+  const cleanJobs = company.jobs.map((job, index) => ({
+    "Công việc số:": index + 1,
+    id: job.id,
+    "Vị trí": job.title,
+    "Mô tả": job.description,
+  }));
+  const prompt = `Thông tin công ty (Dưới dạng JSON):\n${JSON.stringify(
+    cleanCompanyInfo,
+    null,
+    2,
+  )}\n\nDanh sách tuyển dụng và đãi ngộ (Dưới dạng JSON):\n${JSON.stringify(
+    cleanJobs,
+    null,
+    2,
+  )}\n\nCâu hỏi của người dùng:\n${refined_question}\n`;
+
+  const response = await textGeneration(prompt, 0);
+  return response;
+};
+
+/**
+ *
+ * @param {*} refined_question
+ * @returns
+ */
+const _handleGeeting = async (refined_question) => {
+  const prompt = `Câu hỏi của người dùng:\n${refined_question}`;
+  const response = await textGeneration(prompt, 2);
+  return response;
+};
+
+/**
+ *
+ * @param {*} resumeId
+ * @param {*} jobEmbedding
+ * @param {*} topK
+ * @returns
+ */
+async function _getRelevantResumeChunks(resumeId, jobEmbedding, topK = 3) {
+  const resumeVectors = await prisma.$queryRaw`
+    SELECT content, embedding::text FROM "resume_vectors" 
+    WHERE resume_id = ${resumeId}
+  `;
+
+  // @ts-ignore
+  if (resumeVectors.length === 0) return "";
+
+  // @ts-ignore
+  const scoredChunks = resumeVectors.map((chunk) => ({
+    content: chunk.content,
+    score: cosineSimilarity(chunk.embedding, jobEmbedding),
+  }));
+
+  // Lọc lấy những đoạn thực sự có liên quan (score > 0.3) để tránh nhiễu
+  return (
+    scoredChunks
+      // @ts-ignore
+      .filter((c) => c.score > 0.3)
+      // @ts-ignore
+      .sort((a, b) => b.score - a.score)
+      .slice(0, topK)
+      // @ts-ignore
+      .map((c) => c.content)
+      .join("\n---\n")
+  );
+}
+
+/**
+ * Tính toán độ tương đồng Cosine giữa hai vector
+ * @param {number[]} vecA
+ * @param {number[]} vecB
+ */
+function cosineSimilarity(vecA, vecB) {
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+
+  for (let i = 0; i < vecA.length; i++) {
+    dotProduct += vecA[i] * vecB[i];
+    normA += vecA[i] * vecA[i];
+    normB += vecB[i] * vecB[i];
+  }
+
+  // Tránh lỗi chia cho 0
+  if (normA === 0 || normB === 0) return 0;
+
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}

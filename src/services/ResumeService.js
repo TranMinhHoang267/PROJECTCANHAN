@@ -31,10 +31,24 @@ exports.uploadResume = async (userId, file) => {
 
   //when storing success, we will process the content of file to embedding
   if (resume) {
-    console.log(
-      `[Background Job] Starting embedding process for Resume ID: ${resume.id}`,
-    );
-    await ResumeVectorService.processAndStoreResumeVector(resume, userId);
+    global.setImmediate(async () => {
+      try {
+        console.log(
+          `[Background Job] Starting embedding process for Resume ID: ${resume.id}`,
+        );
+        await ResumeVectorService.processAndStoreResumeVector(resume, userId);
+      } catch (err) {
+        console.error(
+          `[Background Job] Error occurred while processing embedding for Job ID: ${resume.id}`,
+          err,
+        );
+        await prisma.resume.update({
+          where: { id: resume.id },
+          data: { vectorStatus: "FAILED" },
+        });
+        throw err;
+      }
+    });
   }
 
   return resume;

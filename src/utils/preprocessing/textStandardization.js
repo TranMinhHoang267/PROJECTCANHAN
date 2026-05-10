@@ -128,4 +128,5 @@ const textStandardization = (text) => {
 
 module.exports = {
   textStandardization,
+  removeStopWords,
 };

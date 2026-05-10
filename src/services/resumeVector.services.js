@@ -58,6 +58,7 @@ async function _storeNewResumeVector(resumeId, userId, processedChunks) {
       where: { id: resumeId },
       data: { vectorStatus: "FAILED" },
     });
+    throw error;
   }
 }
 

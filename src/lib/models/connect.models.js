@@ -39,6 +39,12 @@ const promptTemplate = [
     "entities": ["string"]
   }`,
   },
+  {
+    role: "system",
+    content: `Bạn là trợ lý ảo chuyên tư vấn công việc của hệ thống tuyển dụng JobConnect. 
+          Nhiệm vụ chính của bạn là trả lời các câu hỏi kiểu xã giao.
+          Bạn được phép từ chối lịch sự nếu được hỏi hoặc yêu cầu giải quyết 1 vấn đề mang tính chuyên ngành (yêu cầu viết code, yêu cầu giải toán, ...).`,
+  },
 ];
 
 /**

@@ -9,15 +9,19 @@ npm start            # Production mode (node server.js)
 npm run seed         # Seed database (node prisma/seed.js)
 
 # Database (Prisma)
-npm run db:push      # Push schema to DB
-npm run db:migrate   # Run migrations
+npm run db:push      # Push schema to DB (no migration file)
+npm run db:migrate   # Run migrations (prisma migrate dev)
 npm run generate     # Generate Prisma client (output: prisma/src/generated/)
 npm run studio       # Open Prisma Studio on port 8888
 
-# Testing
-npm test                               # All integration tests (tests/integration/)
-npx jest tests/integration/auth.test.js # Single test file
-npx jest --testNamePattern="login"     # Tests matching pattern
+# Testing (Jest + Supertest)
+npm test                                    # All integration tests (tests/integration/)
+npx jest tests/integration/auth.test.js     # Single test file
+npx jest -t "login"                         # Tests matching pattern (--testNamePattern)
+npx jest --verbose                          # Verbose output with test names
+
+# Linting
+npx eslint .                               # Lint entire project (no npm script)
 ```
 
 ## Code Style Guidelines
@@ -117,11 +121,24 @@ res.status(200).json({ status: 'success', data: items, total: count })
 - Rate limiting: `express-rate-limit` (installed but commented out in server.js)
 - Static files: `app.use('/uploads', express.static(...))`
 
+### Middleware
+- **`authMiddleware.js`** — `protect` (verifies Bearer token via JWT, sets `req.user`) + `authorize('RECRUITER')` (checks role, returns 403)
+- **`uploadResumes.js`** — Multer disk storage → `src/uploads/resumes/`, PDF only, max 3 per user, 5MB limit
+- **`uploadAvatar.js`** — Multer memory storage (for Sharp buffer processing), JPG/PNG/WEBP only, 5MB limit
+- **`logoCompany.js`** — Multer memory storage, any image type, 5MB limit
+
 ### File Uploads (multer + sharp)
 - Configs: `src/config/multer.js` (destination/filename logic)
-- Middleware: `uploadAvatar.js`, `uploadResumes.js`, `logoCompany.js`
 - Image processing with `sharp` for resize/optimization
 - Files stored in `src/uploads/` with organized subfolders
+
+### Utilities (`src/utils/`)
+- **`tokenUtils.js`** — `generateAccessToken(id, role)` (15m), `generateRefreshToken(id)` (7d), `verifyRefreshToken(token)`
+- **`preprocessing/textStandardization.js`** — Vietnamese text pipeline: NFC normalize → lowercase → expand abbreviations (`cty`→`công ty`, `kn`→`kinh nghiệm`) → remove stop words
+- **`preprocessing/textCleaner.js`** — `cleaningText()` removes HTML/emoji/noise; `cleaningJob(job)` builds document string for embedding
+- **`preprocessing/textEmbedding.js`** — HuggingFace InferenceClient with `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`, 3 retries with exponential backoff
+- **`preprocessing/textChunking.js`** — Splits text into 300-char chunks with 50-char overlap at natural breakpoints
+- **`reader/docs.reader.js`** — `pdfReader(filePath)` extracts text via `pdf-parse`, throws `'Không tìm thấy file'` if missing
 
 ### Route Mounting (server.js)
 ```javascript
@@ -136,9 +153,22 @@ app.use('/api/admin/companies', adminCompanyRoutes);
 
 ### Testing (Jest + Supertest)
 - All tests in `tests/integration/`
-- Pattern: `beforeAll` imports server, tests use `supertest(app)`, `afterAll` not typically used for cleanup
-- Data-dependent tests often query DB via `prisma.user.findFirst()` for real credentials
-- Seed data is populated before test runs (presumably via `npm run seed`)
+- Pattern: `beforeAll` imports server, tests use `supertest(app)`, `afterAll` closes server + prisma disconnect
+- Tests create/fetch real DB users using `prisma.user.create()` with cleanup via `deleteMany` in `beforeAll`
+- **Must mock HuggingFace embeddings** to avoid network calls: `jest.mock('../../src/utils/preprocessing/textEmbedding', ...)`
+- Helper: `tests/helper.js` exports `getAccessToken(email, password)` — hits live `POST /api/auth/login`
+- Server exports `app` and `server` for test lifecycle: `module.exports = app; module.exports.server = server;`
+- Test files require server: `const { app, server } = require('../../server');`
+- Seed data populated via `npm run seed` before running test suite
+
+### API Documentation
+- **`API.md`** (672 lines) at project root — full reference for all endpoints
+- Sections: Auth, Candidate Module, Recruiter Module, Public Endpoints, Admin Module, Chat/LLM
+- All request/response fields use **camelCase** (documented explicitly)
+
+### Scheduler
+- `src/scheduler/vectorRetry.scheduler.js` — `setupVectorSchedule()` runs daily via `node-cron`
+- Retries vector embedding for jobs that failed previous embedding attempts
 
 ### Linting & Quality
 - **ESLint** configured: `eslint.config.mjs` with `@eslint/js` recommended rules (CommonJS source type)

@@ -57,6 +57,7 @@ async function _storeNewJobVector(jobId, processedChunks) {
       where: { id: jobId },
       data: { vectorStatus: "FAILED" },
     });
+    throw error;
   }
 }
 
@@ -96,6 +97,7 @@ async function updateExistingJobVector(jobId, processedChunks) {
       where: { id: jobId },
       data: { vectorStatus: "FAILED" },
     });
+    throw error;
   }
 }
 
