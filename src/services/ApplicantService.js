@@ -212,7 +212,7 @@ const VALID_TRANSITIONS = {
     rejected:     []
 };
 
-exports.updateApplicationStatus = async (userId, applicationId, status, note) => {
+exports.updateApplicationStatus = async (userId, applicationId, status) => {
     const validStatuses = Object.keys(VALID_TRANSITIONS);
     if (!validStatuses.includes(status)) {
         throw new Error(`Trạng thái không hợp lệ. Chỉ chấp nhận: ${validStatuses.join(', ')}`);
