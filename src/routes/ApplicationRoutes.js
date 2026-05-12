@@ -8,7 +8,7 @@ router.use(protect);
 /**
  * @route   POST /api/applications
  * @desc    Nộp đơn ứng tuyển một công việc
- * @body    { job_id, resume_id?, cover_letter? }
+ * @body    { jobId, resumeId?, coverLetter? }
  * @access  Private
  */
 router.post('/', ApplicationController.applyJob);
@@ -19,19 +19,5 @@ router.post('/', ApplicationController.applyJob);
  * @access  Private
  */
 router.get('/', ApplicationController.getMyApplications);
-
-/**
- * @route   GET /api/applications/:id
- * @desc    Chi tiết một đơn ứng tuyển
- * @access  Private
- */
-router.get('/:id', ApplicationController.getApplicationDetail);
-
-/**
- * @route   DELETE /api/applications/:id
- * @desc    Rút đơn ứng tuyển (chỉ khi status = "submitted")
- * @access  Private
- */
-router.delete('/:id', ApplicationController.withdrawApplication);
 
 module.exports = router;

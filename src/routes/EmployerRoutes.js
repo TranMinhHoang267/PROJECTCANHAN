@@ -14,11 +14,11 @@ router.get('/',  EmployerController.getMyCompany);
 router.put('/',  EmployerController.updateCompany);
 
 // LOGO
-router.put('/',
+router.put('/logo',
     uploadLogoConfig.single('logo'),
     EmployerController.updateLogo
 );
-router.delete('/', EmployerController.deleteLogo);
+router.delete('/logo', EmployerController.deleteLogo);
 
 // Xử lý lỗi Multer
 router.use((err, _req, res, _next) => {

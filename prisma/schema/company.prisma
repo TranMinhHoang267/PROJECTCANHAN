@@ -1,0 +1,23 @@
+model Company {
+  id                String   @id @default(uuid()) @db.Uuid
+  name              String
+  description       String?  @db.Text
+  website           String?
+  logoUrl           String?  @map("logo_url")
+  address           String?
+  city              String?
+  size              String?
+  status            String   @default("pending")
+  rejectionReason   String?  @db.Text @map("rejection_reason")
+  userId            String   @unique @map("user_id") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user         User          @relation("UserToCompany", fields: [userId], references: [id], onDelete: Cascade)
+  jobs         Job[]         @relation("CompanyToJob")
+  applications Application[] @relation("ApplicationToCompany")
+
+  @@index([userId])
+  @@map("companies")
+}

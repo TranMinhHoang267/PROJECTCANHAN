@@ -10,7 +10,5 @@ router.use(authorize(ROLES.CANDIDATE));
 
 router.get('/profile', candidate_profile.getMyProfile);
 router.put('/profile', candidate_profile.updateProfile);
-router.delete('/profile', candidate_profile.deleteProfile);
-
 
 module.exports = router;

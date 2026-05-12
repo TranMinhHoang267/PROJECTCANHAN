@@ -1,122 +1,103 @@
-const { Job, Company, User, Skill } = require('../models');
-const { Op } = require('sequelize');
+const prisma = require('../config/prisma');
 
-// ==============================================================================
-// 1. DANH SÁCH TIN TUYỂN DỤNG ĐANG CHỜ DUYỆT
-// ==============================================================================
 exports.getPendingJobs = async (filters = {}) => {
-    const pageSize   = Math.min(50, Math.max(1, parseInt(filters.limit) || 10));
+    const pageSize = Math.min(50, Math.max(1, parseInt(filters.limit) || 10));
     const pageNumber = Math.max(1, parseInt(filters.page) || 1);
-    const offset     = (pageNumber - 1) * pageSize;
+    const skip = (pageNumber - 1) * pageSize;
 
-    const { count, rows } = await Job.findAndCountAll({
-        where: { status: 'pending' },
-        include: [
-            {
-                model: Company,
-                as: 'company',
-                attributes: ['id', 'name', 'logo_url', 'city'],
-                include: [{ model: User, as: 'user', attributes: ['full_name', 'email'] }]
+    const [count, jobs] = await Promise.all([
+        prisma.job.count({ where: { status: 'pending' } }),
+        prisma.job.findMany({
+            where: { status: 'pending' },
+            include: {
+                company: {
+                    select: {
+                        id: true, name: true, logoUrl: true, city: true,
+                        user: { select: { fullName: true, email: true } }
+                    }
+                },
+                skills: {
+                    include: { skill: { select: { id: true, name: true } } }
+                }
             },
-            {
-                model: Skill,
-                as: 'skills',
-                through: { attributes: [] },
-                attributes: ['id', 'name']
-            }
-        ],
-        order:    [['createdAt', 'ASC']], // FIFO
-        limit:    pageSize,
-        offset,
-        distinct: true
-    });
+            orderBy: { createdAt: 'asc' },
+            take: pageSize,
+            skip
+        })
+    ]);
+
+    const transformedJobs = jobs.map(job => ({
+        ...job,
+        skills: job.skills.map(js => js.skill)
+    }));
 
     return {
-        total_items:  count,
-        total_pages:  Math.ceil(count / pageSize),
+        total_items: count,
+        total_pages: Math.ceil(count / pageSize),
         current_page: pageNumber,
-        jobs:         rows
+        jobs: transformedJobs
     };
 };
 
-// ==============================================================================
-// 2. DANH SÁCH TẤT CẢ TIN TUYỂN DỤNG (lọc theo status)
-// ==============================================================================
 exports.getAllJobs = async (filters = {}) => {
     const {
         status,
         keyword,
-        page  = 1,
+        page = 1,
         limit = 10
     } = filters;
 
-    const pageSize   = Math.min(50, Math.max(1, parseInt(limit)));
+    const pageSize = Math.min(50, Math.max(1, parseInt(limit)));
     const pageNumber = Math.max(1, parseInt(page));
-    const offset     = (pageNumber - 1) * pageSize;
+    const skip = (pageNumber - 1) * pageSize;
 
     const where = {};
     if (status) where.status = status;
+    if (keyword) where.title = { contains: keyword.trim(), mode: 'insensitive' };
 
-    // Tìm kiếm theo tiêu đề job
-    if (keyword) {
-        where.title = { [Op.substring]: keyword.trim() };
-    }
-
-    const { count, rows } = await Job.findAndCountAll({
-        where,
-        include: [
-            {
-                model: Company,
-                as: 'company',
-                attributes: ['id', 'name', 'logo_url', 'city']
+    const [count, jobs] = await Promise.all([
+        prisma.job.count({ where }),
+        prisma.job.findMany({
+            where,
+            include: {
+                company: { select: { id: true, name: true, logoUrl: true, city: true } },
+                skills: { include: { skill: { select: { id: true, name: true } } } }
             },
-            {
-                model: Skill,
-                as: 'skills',
-                through: { attributes: [] },
-                attributes: ['id', 'name']
-            }
-        ],
-        order:    [['createdAt', 'DESC']],
-        limit:    pageSize,
-        offset,
-        distinct: true
-    });
+            orderBy: { createdAt: 'desc' },
+            take: pageSize,
+            skip
+        })
+    ]);
+
+    const transformedJobs = jobs.map(job => ({
+        ...job,
+        skills: job.skills.map(js => js.skill)
+    }));
 
     return {
-        total_items:  count,
-        total_pages:  Math.ceil(count / pageSize),
+        total_items: count,
+        total_pages: Math.ceil(count / pageSize),
         current_page: pageNumber,
-        jobs:         rows
+        jobs: transformedJobs
     };
 };
 
-// ==============================================================================
-// 3. XEM CHI TIẾT MỘT TIN TUYỂN DỤNG
-// ==============================================================================
 exports.getJobDetail = async (jobId) => {
-    const job = await Job.findByPk(jobId, {
-        include: [
-            {
-                model: Company,
-                as: 'company',
-                include: [{ model: User, as: 'user', attributes: ['full_name', 'email', 'phone'] }]
+    const job = await prisma.job.findUnique({
+        where: { id: jobId },
+        include: {
+            company: {
+                include: { user: { select: { fullName: true, email: true, phone: true } } }
             },
-            { model: Skill, as: 'skills', through: { attributes: [] } }
-        ]
+            skills: { include: { skill: true } }
+        }
     });
     if (!job) throw new Error('Tin tuyển dụng không tồn tại.');
+
+    job.skills = job.skills.map(js => js.skill);
     return job;
 };
 
-// ==============================================================================
-// 4. DUYỆT TIN TUYỂN DỤNG (approved / rejected)
-// ==============================================================================
-/**
- * @param {string} jobId
- * @param {'approved' | 'rejected'} action
- * @param {string} [reason] - Bắt buộc khi rejected
- */
 exports.reviewJob = async (jobId, action, reason) => {
     if (!['approved', 'rejected'].includes(action)) {
         throw new Error('Hành động không hợp lệ. Chỉ chấp nhận: approved hoặc rejected.');
@@ -125,29 +106,30 @@ exports.reviewJob = async (jobId, action, reason) => {
         throw new Error('Vui lòng cung cấp lý do từ chối tin đăng.');
     }
 
-    const job = await Job.findByPk(jobId);
+    const job = await prisma.job.findUnique({ where: { id: jobId } });
     if (!job) throw new Error('Tin tuyển dụng không tồn tại.');
 
     if (job.status !== 'pending') {
         throw new Error(`Tin tuyển dụng này đã được xử lý (trạng thái hiện tại: ${job.status}).`);
     }
 
-    await job.update({
-        status:           action,
-        rejection_reason: action === 'rejected' ? reason.trim() : null
+    await prisma.job.update({
+        where: { id: jobId },
+        data: {
+            status: action,
+            rejectionReason: action === 'rejected' ? reason.trim() : null
+        }
     });
 
-    return await Job.findByPk(jobId, {
-        include: [{ model: Company, as: 'company', attributes: ['name'] }]
+    return await prisma.job.findUnique({
+        where: { id: jobId },
+        include: { company: { select: { name: true } } }
     });
 };
 
-// ==============================================================================
-// 5. XÓA JOB VI PHẠM (Admin — kể cả job đã approved)
-// ==============================================================================
 exports.deleteJob = async (jobId) => {
-    const job = await Job.findByPk(jobId);
+    const job = await prisma.job.findUnique({ where: { id: jobId } });
     if (!job) throw new Error('Tin tuyển dụng không tồn tại.');
-    await job.destroy();
+    await prisma.job.delete({ where: { id: jobId } });
     return true;
 };

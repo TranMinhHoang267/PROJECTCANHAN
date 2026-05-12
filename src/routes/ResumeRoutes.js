@@ -52,17 +52,6 @@ router.patch('/:id/default',
 );
 
 /**
- * @route   GET /api/resumes/:id/view
- * @desc    Xem trước CV (stream PDF — dùng cho PDF Viewer)
- * @access  Private
- */
-
-// GET /api/resumes/:id/view — Xem trước CV (stream PDF)
-router.get('/:id/view',
-    ResumeController.viewResume
-);
-
-/**
  * @route   DELETE /api/resumes/:id
  * @desc    Xóa một CV
  * @access  Private

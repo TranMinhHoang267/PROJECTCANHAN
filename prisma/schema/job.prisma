@@ -1,0 +1,60 @@
+enum VECTOR_STATUS {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model Job {
+  id              String        @id @default(uuid()) @db.Uuid
+  companyId       String        @map("company_id") @db.Uuid
+  title           String
+  description     String?       @db.Text
+  requirements    String?       @db.Text
+  benefits        String?       @db.Text
+  salaryMin       Int?          @map("salary_min")
+  salaryMax       Int?          @map("salary_max")
+  location        String?
+  jobType         String?       @map("job_type")
+  jobLevel        String?       @map("job_level")
+  status          String        @default("pending")
+  rejectionReason String?       @map("rejection_reason") @db.Text
+  deadline        DateTime?
+  viewsCount      Int           @default(0) @map("views_count")
+  vectorStatus    VECTOR_STATUS @default(PENDING) @map("vector_status")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  company      Company       @relation("CompanyToJob", fields: [companyId], references: [id])
+  skills       Job_skill[]   @relation("JobToJobSkill")
+  applications Application[] @relation("JobToApplication")
+  bookmarks    Bookmark[]    @relation("JobToBookmark")
+  jobVectors   JobVectors[]  @relation("JobToExperience")
+
+  @@index([companyId])
+  @@map("jobs")
+}
+
+model Job_skill {
+  jobId   String @map("job_id") @db.Uuid
+  skillId String @map("skill_id") @db.Uuid
+
+  job   Job   @relation("JobToJobSkill", fields: [jobId], references: [id], onDelete: Cascade)
+  skill Skill @relation("SkillToJobSkill", fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([jobId, skillId])
+  @@index([jobId, skillId])
+  @@map("job_skills")
+}
+
+model Skill {
+  id   String @id @default(uuid()) @db.Uuid
+  name String @unique
+
+  // Relations
+  jobs       Job_skill[]       @relation("SkillToJobSkill")
+  candidates Candidate_skill[] @relation("SkillToCandidateSkill")
+
+  @@map("skills")
+}

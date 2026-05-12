@@ -1,7 +1,7 @@
 const multer = require('multer');
-const path   = require('path');
-const fs     = require('fs');
-const { Resume } = require('../models');
+const path = require('path');
+const fs = require('fs');
+const prisma = require('../config/prisma');
 
 const UPLOAD_DIR = path.join(__dirname, '../uploads/resumes');
 
@@ -19,14 +19,12 @@ const storage = multer.diskStorage({
 });
 
 const fileFilter = async (req, file, cb) => {
-    // 1. Kiểm tra định dạng
     if (file.mimetype !== 'application/pdf') {
         return cb(new Error('Chỉ chấp nhận file PDF!'), false);
     }
 
-    // 2. Kiểm tra giới hạn 3 CV trước khi lưu file
     try {
-        const count = await Resume.count({ where: { user_id: req.user.id } });
+        const count = await prisma.resume.count({ where: { userId: req.user.id } });
         if (count >= 3) {
             return cb(new Error('Bạn chỉ được upload tối đa 3 CV. Vui lòng xóa CV cũ trước khi upload mới.'), false);
         }
@@ -40,7 +38,7 @@ const uploadResumeConfig = multer({
     storage,
     fileFilter,
     limits: {
-        fileSize: 5 * 1024 * 1024, // 5MB
+        fileSize: 5 * 1024 * 1024,
         files: 1
     }
 });

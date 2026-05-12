@@ -1,0 +1,30 @@
+# EditorConfig giúp giữ định dạng code đồng nhất giữa Win và Linux
+root = true
+
+[*]
+# Sử dụng bảng mã UTF-8 để không bị lỗi font tiếng Việt/ký tự đặc biệt
+charset = utf-8
+
+# Ép sử dụng kiểu xuống dòng của Linux (LF)
+# Điều này cực kỳ quan trọng vì nếu dùng CRLF của Win, Linux có thể báo lỗi biên dịch
+end_of_line = lf
+
+# Luôn có một dòng trống ở cuối file (tiêu chuẩn của nhiều trình biên dịch)
+insert_final_newline = true
+
+# Tự động xóa khoảng trắng thừa ở cuối dòng
+trim_trailing_whitespace = true
+
+# Định dạng riêng cho từng loại file
+[*.{js,jsx,ts,tsx,html,css,json}]
+indent_style = space
+indent_size = 2
+
+[*.py]
+# Python ưu tiên dùng 4 khoảng trắng (theo chuẩn PEP8)
+indent_style = space
+indent_size = 4
+
+[*.{cpp,h,hpp,c}]
+indent_style = space
+indent_size = 4

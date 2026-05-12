@@ -11,8 +11,8 @@ exports.searchJobs = async (req, res) => {
             keyword:   req.query.keyword?.trim()  || null,
             location:  req.query.location?.trim() || null,
             salary:    req.query.salary            || null,
-            job_type:  req.query.job_type          || null,
-            job_level: req.query.job_level         || null,
+            jobType:   req.query.jobType           || null,
+            jobLevel:  req.query.jobLevel          || null,
             page,
             limit
         };

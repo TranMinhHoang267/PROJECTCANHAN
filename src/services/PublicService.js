@@ -1,54 +1,49 @@
-const { Job, Company, Skill } = require('../models');
+const prisma = require('../config/prisma');
 
-// ==============================================================================
-// 1. LẤY CHI TIẾT 1 CÔNG VIỆC (PUBLIC)
-// ==============================================================================
 exports.getJobDetail = async (jobId) => {
-    const job = await Job.findOne({
-        where: { 
-            id: jobId, 
-            status: 'approved' // Khách chỉ thấy job đã duyệt
+    const job = await prisma.job.findFirst({
+        where: {
+            id: jobId,
+            status: 'approved'
         },
-        include: [
-            {
-                model: Company,
-                as: 'company',
-                attributes: ['id', 'name', 'logo_url', 'city', 'address', 'website', 'size', 'description']
+        include: {
+            company: {
+                select: {
+                    id: true, name: true, logoUrl: true, city: true,
+                    address: true, website: true, size: true, description: true
+                }
             },
-            {
-                model: Skill,
-                as: 'skills',
-                attributes: ['id', 'name'],
-                through: { attributes: [] }
+            skills: {
+                include: { skill: { select: { id: true, name: true } } }
             }
-        ]
+        }
     });
 
     if (!job) {
         throw new Error('Không tìm thấy tin tuyển dụng hoặc tin đã bị khóa/gỡ bỏ.');
     }
 
+    job.skills = job.skills.map(js => js.skill);
     return job;
 };
 
-// ==============================================================================
-// 2. LẤY CHI TIẾT THÔNG TIN 1 CÔNG TY VÀ CÁC JOB CỦA HỌ (PUBLIC)
-// ==============================================================================
 exports.getCompanyDetail = async (companyId) => {
-    const company = await Company.findOne({
+    const company = await prisma.company.findFirst({
         where: { id: companyId, status: 'approved' },
-        attributes: { exclude: ['user_id', 'status', 'rejection_reason'] },
-        include: [{
-            model: Job,
-            as: 'jobs',
-            where:    { status: 'approved' },
-            required: false,
-            attributes: ['id', 'title', 'location', 'salary_min', 'salary_max', 
-                         'job_type', 'createdAt', 'deadline', 'job_level']
-            // ❌ 
-        }],
-        // 
-        order: [[{ model: Job, as: 'jobs' }, 'createdAt', 'DESC']]
+        select: {
+            id: true, name: true, description: true, website: true,
+            logoUrl: true, address: true, city: true, size: true,
+            createdAt: true,
+            jobs: {
+                where: { status: 'approved' },
+                select: {
+                    id: true, title: true, location: true,
+                    salaryMin: true, salaryMax: true,
+                    jobType: true, createdAt: true, deadline: true, jobLevel: true
+                },
+                orderBy: { createdAt: 'desc' }
+            }
+        }
     });
 
     if (!company) throw new Error('Không tìm thấy thông tin công ty hoặc công ty chưa được duyệt.');

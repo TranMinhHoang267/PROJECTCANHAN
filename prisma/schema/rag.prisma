@@ -1,0 +1,31 @@
+model ResumeVectors {
+    id        String                 @id @default(uuid()) @db.Uuid
+    userId    String                 @map("user_id") @db.Uuid
+    resumeId  String                 @map("resume_id") @db.Uuid
+    content   String                 @db.Text
+    embedding Unsupported("vector(384)")
+    createdAt DateTime               @default(now()) @map("created_at")
+    updatedAt DateTime               @updatedAt @map("updated_at")
+
+    // Relations
+    resume Resume @relation("ResumeToExperience", fields: [resumeId], references: [id], onDelete: Cascade)
+    user   User   @relation("UserToResumeVectors", fields: [userId], references: [id], onDelete: Cascade)
+
+    @@index([resumeId])
+    @@map("resume_vectors")
+}
+
+model JobVectors {
+    id        String                 @id @default(uuid()) @db.Uuid
+    jobId     String                 @map("job_id") @db.Uuid
+    content   String                 @db.Text
+    embedding Unsupported("vector(384)")
+    createdAt DateTime               @default(now()) @map("created_at")
+    updatedAt DateTime               @updatedAt @map("updated_at")
+
+    // Relations
+    job Job @relation("JobToExperience", fields: [jobId], references: [id], onDelete: Cascade)
+
+    @@index([jobId])
+    @@map("job_vectors")
+}

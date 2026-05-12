@@ -1,184 +1,162 @@
-const { User, Company, Candidate_profile, sequelize } = require('../models');
+const prisma = require('../config/prisma');
 const { ROLES } = require('../constants/roles');
 const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = require('../utils/tokenUtils');
-const { Op } = require('sequelize');
+const bcrypt = require('bcryptjs');
 
-/**
- * Register a new user
- * @param {Object} data - Registration data
- * @returns {Promise<Object>} Created user and tokens
- */
 exports.register = async (data) => {
-    // 1. CHUẨN HÓA DỮ LIỆU ĐẦU VÀO (Làm sạch 1 lần, dùng cho toàn bộ file)
     const email = data.email?.trim();
     const phone = data.phone?.trim();
-    const full_name = data.full_name?.trim();
+    const fullName = data.fullName?.trim();
     const password = data.password;
-    const company_name = data.company_name?.trim();
+    const companyName = data.companyName?.trim();
     const address = data.address?.trim();
 
-    // 2. VALIDATE EMAIL
     if (!/^[a-zA-Z0-9.]+@gmail\.com$/.test(email)) {
         throw new Error('Email không hợp lệ (Viết liền, không dấu, đuôi @gmail.com)');
     }
 
-    // 3. VALIDATE PASSWORD
     if (!password || password.length < 6) {
         throw new Error('Password phải có ít nhất 6 ký tự');
     }
 
-    // 4. VALIDATE PHONE
     if (!phone) {
         throw new Error('Số điện thoại là bắt buộc');
     }
     if (!/^0\d{9}$/.test(phone)) {
         throw new Error('Số điện thoại phải bắt đầu bằng số 0 và có đúng 10 chữ số');
-    }   
+    }
 
-    // 5. VALIDATE FULL NAME
-    if (!full_name) {
+    if (!fullName) {
         throw new Error('Họ tên không được để trống');
     }
-    if (full_name.length < 2 || full_name.length > 50) {
+    if (fullName.length < 2 || fullName.length > 50) {
         throw new Error('Họ tên phải từ 2 đến 50 ký tự');
     }
-    if (!/^[a-zA-ZÀ-ỹ\s]+$/.test(full_name)) {
+    if (!/^[a-zA-ZÀ-ỹ\s]+$/.test(fullName)) {
         throw new Error('Họ tên chỉ được chứa chữ cái và khoảng trắng');
     }
-    
-    // Check conflicts (Email or Phone)
-    const existingUser = await User.findOne({
+
+    const existingUser = await prisma.user.findFirst({
         where: {
-            [Op.or]: [
+            OR: [
                 { email: email },
                 { phone: phone }
             ]
         }
     });
 
-   if (existingUser) {
+    if (existingUser) {
         if (existingUser.email === email) throw new Error('Email đã được sử dụng');
         if (existingUser.phone === phone) throw new Error('Số điện thoại đã được sử dụng');
     }
-    
-    // Determine role
-let role = ROLES.CANDIDATE;
-// Nếu có nhập bất kỳ thông tin công ty nào
-if (company_name || address) {
-    // Validate: Phải nhập đủ cả 2
-    if (!company_name) {
-        throw new Error('Thiếu tên công ty. Vui lòng nhập đầy đủ thông tin công ty hoặc bỏ trống để đăng ký tài khoản ứng viên');
+
+    let role = ROLES.CANDIDATE;
+    if (companyName || address) {
+        if (!companyName) {
+            throw new Error('Thiếu tên công ty. Vui lòng nhập đầy đủ thông tin công ty hoặc bỏ trống để đăng ký tài khoản ứng viên');
+        }
+        if (!address) {
+            throw new Error('Thiếu địa chỉ công ty. Vui lòng nhập đầy đủ địa chỉ công ty hoặc bỏ trống để đăng ký tài khoản ứng viên');
+        }
+        role = ROLES.RECRUITER;
     }
-    if (!address) {
-        throw new Error('Thiếu địa chỉ công ty. Vui lòng nhập đầy đủ địa chỉ công ty hoặc bỏ trống để đăng ký tài khoản ứng viên');
-    }
-    role = ROLES.RECRUITER;
-}
-    const t = await sequelize.transaction();
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
 
     try {
-        // Create user
-        const user = await User.create({
-            email,
-            phone,
-            password,
-            full_name,
-            role: role
-        }, { transaction: t });
+        const result = await prisma.$transaction(async (tx) => {
+            const user = await tx.user.create({
+                data: {
+                    email,
+                    phone,
+                    password: hashedPassword,
+                    fullName,
+                    role
+                }
+            });
 
-        // Create profile based on role
-        if (role === ROLES.CANDIDATE) {
-            await Candidate_profile.create({
-                user_id: user.id
-            }, { transaction: t }); 
-        }
+            if (role === ROLES.CANDIDATE) {
+                await tx.candidate_profile.create({
+                    data: {
+                        userId: user.id
+                    }
+                });
+            }
 
-        if (role === ROLES.RECRUITER) {
-        await Company.create({
-            user_id: user.id,
-            name:    company_name.trim(),
-            address: address.trim(),
-            status:  'pending'
-        }, { transaction: t });
-    }
+            if (role === ROLES.RECRUITER) {
+                await tx.company.create({
+                    data: {
+                        userId: user.id,
+                        name: companyName,
+                        address: address,
+                        status: 'pending'
+                    }
+                });
+            }
 
-        // Generate tokens
-        const accessToken = generateAccessToken(user.id, user.role);
-        const refreshToken = generateRefreshToken(user.id);
+            const accessToken = generateAccessToken(user.id, user.role);
+            const refreshToken = generateRefreshToken(user.id);
 
-        // Save refresh token
-        user.refresh_token = refreshToken;
-        await user.save({ transaction: t });
+            await tx.user.update({
+                where: { id: user.id },
+                data: { refreshToken }
+            });
 
-        await t.commit();
+            return {
+                id: user.id,
+                email: user.email,
+                phone: user.phone,
+                fullName: user.fullName,
+                role: user.role,
+                accessToken,
+                refreshToken
+            };
+        });
 
-        return {
-            id: user.id,
-            email: user.email,
-            phone: user.phone,
-            full_name: user.full_name,
-            role: user.role,
-            accessToken,
-            refreshToken
-        };
-
+        return result;
     } catch (error) {
-        await t.rollback();
         throw error;
     }
 };
 
-/**
- * Login user
- * @param {Object} credentials - email and password
- * @returns {Promise<Object>} User info and tokens
- */
 exports.login = async ({ email, password }) => {
-    const user = await User.findOne({ where: { email } });
+    const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
         throw new Error('Email hoặc mật khẩu không đúng');
     }
 
-
-    const isMatch = await user.matchPassword(password);
-
+    const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
         throw new Error('Mật khẩu không đúng');
     }
 
-    
-    // Generate tokens
     const accessToken = generateAccessToken(user.id, user.role);
     const refreshToken = generateRefreshToken(user.id);
 
-    // Save refresh token to DB
-    user.refresh_token = refreshToken;
-    await user.save();
+    await prisma.user.update({
+        where: { id: user.id },
+        data: { refreshToken }
+    });
 
     return {
-    id:           user.id,
-    email:        user.email,
-    phone:        user.phone,
-    full_name:    user.full_name,
-    role:         user.role,
-    avatar_url:   user.avatar_url || null,
-    accessToken,
-    refreshToken
+        id: user.id,
+        email: user.email,
+        phone: user.phone,
+        fullName: user.fullName,
+        role: user.role,
+        avatarUrl: user.avatarUrl || null,
+        accessToken,
+        refreshToken
+    };
 };
 
-};
-
-/**
- * Refresh access token
- * @param {string} refreshToken 
- * @returns {Promise<string>} New access token
- */
 exports.refreshToken = async (refreshToken) => {
     try {
         const decoded = verifyRefreshToken(refreshToken);
-        const user = await User.findByPk(decoded.id);
+        const user = await prisma.user.findUnique({ where: { id: decoded.id } });
 
-        if (!user || user.refresh_token !== refreshToken) {
+        if (!user || user.refreshToken !== refreshToken) {
             throw new Error('Refresh token không hợp lệ hoặc đã hết hạn');
         }
 
@@ -188,13 +166,11 @@ exports.refreshToken = async (refreshToken) => {
     }
 };
 
-/**
- * Logout user
- * @param {Object} user - User instance from request
- * @returns {Promise<void>}
- */
 exports.logout = async (user) => {
     if (user) {
-        await user.save();
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { refreshToken: null }
+        });
     }
 };
