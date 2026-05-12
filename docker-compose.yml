@@ -1,4 +1,4 @@
-# docker-compose.prod.yml (Bản chuẩn mang lên server thật)
+# docker-compose.prod.yml
 services:
   # 1. DATABASE
   db:
