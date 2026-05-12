@@ -6,50 +6,58 @@ exports.searchJobs = async (filters) => {
         page = 1, limit = 10
     } = filters;
 
-    const pageSize = parseInt(limit);
-    const pageNumber = parseInt(page);
-    const skip = (pageNumber - 1) * pageSize;
+    const pageSize   = Math.min(50, Math.max(1, parseInt(limit) || 10));
+    const pageNumber = Math.max(1, parseInt(page) || 1);
+    const skip       = (pageNumber - 1) * pageSize;
 
-    const conditions = [
-        { status: 'approved' },
-        {
-            [Op.or]: [
-                { deadline: { [Op.gt]: sequelize.fn('NOW') } },
-                { deadline: null }
-            ]
-        }
-    ];
+    // ✅ Khởi tạo where đúng Prisma
+    const where = {
+        status: 'approved',
+        OR: [
+            { deadline: { gt: new Date() } },
+            { deadline: null }
+        ]
+    };
 
+    // ✅ Keyword — tìm theo title, company name, skill name
     if (keyword) {
-        const escapedKey = keyword.trim();
-        where.OR = [
-            { title: { contains: escapedKey, mode: 'insensitive' } },
-            { company: { name: { contains: escapedKey, mode: 'insensitive' } } },
+        const key = keyword.trim();
+        where.AND = [
+            ...(where.AND || []),
             {
-                skills: {
-                    some: {
-                        skill: {
-                            name: { contains: escapedKey, mode: 'insensitive' }
+                OR: [
+                    { title:   { contains: key, mode: 'insensitive' } },
+                    { company: { name: { contains: key, mode: 'insensitive' } } },
+                    {
+                        skills: {
+                            some: {
+                                skill: { name: { contains: key, mode: 'insensitive' } }
+                            }
                         }
                     }
-                }
+                ]
             }
         ];
     }
 
+    // ✅ Location — tìm theo location, city, address
     if (location) {
-        const escapedLoc = location.trim();
-        where.OR = where.OR || [];
-        where.OR.push(
-            { location: { contains: escapedLoc, mode: 'insensitive' } },
-            { company: { city: { contains: escapedLoc, mode: 'insensitive' } } },
-            { company: { address: { contains: escapedLoc, mode: 'insensitive' } } }
-        );
+        const loc = location.trim();
+        where.AND = [
+            ...(where.AND || []),
+            {
+                OR: [
+                    { location: { contains: loc, mode: 'insensitive' } },
+                    { company:  { city:    { contains: loc, mode: 'insensitive' } } },
+                    { company:  { address: { contains: loc, mode: 'insensitive' } } }
+                ]
+            }
+        ];
     }
 
-    if (jobType) where.jobType = jobType;
-    if (jobLevel) where.jobLevel = jobLevel;
-    if (salary) where.salaryMax = { gte: parseInt(salary) };
+    if (jobType)  where.jobType   = jobType;
+    if (jobLevel) where.jobLevel  = jobLevel;
+    if (salary)   where.salaryMax = { gte: parseInt(salary) };
 
     const [count, jobs] = await Promise.all([
         prisma.job.count({ where }),
@@ -58,18 +66,16 @@ exports.searchJobs = async (filters) => {
             include: {
                 company: {
                     select: {
-                        id: true,
-                        name: true,
-                        logoUrl: true,
-                        city: true,
-                        address: true
+                        id:       true,
+                        name:     true,
+                        logoUrl:  true,
+                        city:     true,
+                        address:  true
                     }
                 },
                 skills: {
                     include: {
-                        skill: {
-                            select: { id: true, name: true }
-                        }
+                        skill: { select: { id: true, name: true } }
                     }
                 }
             },
@@ -79,26 +85,27 @@ exports.searchJobs = async (filters) => {
         })
     ]);
 
+    // ✅ Dùng jobs đã transform, không dùng rows
     const transformedJobs = jobs.map(job => ({
-        id: job.id,
-        title: job.title,
-        location: job.location,
-        jobType: job.jobType,
-        jobLevel: job.jobLevel,
-        benefits: job.benefits,
-        description: job.description,
+        id:           job.id,
+        title:        job.title,
+        location:     job.location,
+        jobType:      job.jobType,
+        jobLevel:     job.jobLevel,
+        benefits:     job.benefits,
+        description:  job.description,
         requirements: job.requirements,
-        skills: job.skills.map(js => js.skill),
-        salaryMin: job.salaryMin,
-        salaryMax: job.salaryMax,
-        deadline: job.deadline,
-        company: job.company
+        skills:       job.skills.map(js => js.skill),
+        salaryMin:    job.salaryMin,
+        salaryMax:    job.salaryMax,
+        deadline:     job.deadline,
+        company:      job.company
     }));
 
     return {
-        total_items: count,
-        total_pages: Math.ceil(count / pageSize),
+        total_items:  count,
+        total_pages:  Math.ceil(count / pageSize),
         current_page: pageNumber,
-        jobs: rows.filter(job => !job.deadline || new Date(job.deadline) > new Date())
+        jobs:         transformedJobs  // ✅ dùng transformedJobs thay vì rows
     };
 };

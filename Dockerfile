@@ -13,11 +13,10 @@ RUN npm install
 # Copy toàn bộ code vào container
 COPY . .
 
-# Generate Prisma Client (nếu dự án sử dụng Prisma)
-RUN npx prisma generate
+# ĐÃ XÓA DÒNG GENERATE Ở ĐÂY ĐỂ TRÁNH LỖI DATABASE_URL
 
 # Expose port mà ứng dụng chạy (thường là 3000)
 EXPOSE 3000
 
-# Lệnh khởi chạy ứng dụng (sử dụng npm run dev để hỗ trợ nodemon trong quá trình phát triển)
+# Lệnh khởi chạy ứng dụng
 CMD ["npm", "run", "dev"]

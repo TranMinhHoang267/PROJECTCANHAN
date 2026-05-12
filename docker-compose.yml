@@ -1,56 +1,37 @@
-# docker-compose.prod.yml
 services:
-  # 1. DATABASE
-  db:
-    image: postgres:17-alpine
-    container_name: postgres_db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME:-project_canhan}
-    volumes:
-      - postgres_data_prod:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - app-network
-
-  # 2. BACKEND
+  # --- BACKEND: Node.js ---
   backend:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: node_backend
+    # Lệnh này đảm bảo Prisma Client luôn được generate đúng môi trường Linux khi start
+    command: sh -c "npx prisma generate && npm run dev"
     restart: unless-stopped
     ports:
       - "3000:3000"
+    env_file:
+      - .env
     environment:
-      - NODE_ENV=production
-      # KẾT NỐI CHUẨN: Tên host là 'db' và port gốc 5432
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}?schema=public
+      - NODE_ENV=development
+      - DB_HOST=host.docker.internal
+      - DB_PORT=${DB_PORT:-5433}
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@host.docker.internal:${DB_PORT:-5433}/${DB_NAME}?schema=public
       - JWT_SECRET=${JWT_SECRET}
       - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-15m}
       - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
       - JWT_REFRESH_EXPIRES_IN=${JWT_REFRESH_EXPIRES_IN:-7d}
       - BCRYPT_ROUNDS=${BCRYPT_ROUNDS:-10}
-    depends_on:
-      db:
-        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
-      - ./src/uploads:/app/src/uploads # Chỉ giữ lại tập tin upload khi lên server
-    networks:
-      - app-network
-
-volumes:
-  postgres_data_prod: # Dữ liệu DB thật trên server
+      - .:/app
+      # Quan trọng: Giữ node_modules của container không bị máy host đè lên
+      - /app/node_modules
+      - ./src/uploads:/app/src/uploads
+    security_opt:
+      - no-new-privileges:true
 
 networks:
-  app-network:
-    driver: bridge
-
+  default:
+    name: canhan_backend_network

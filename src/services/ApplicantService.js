@@ -253,11 +253,21 @@ exports.deleteApplication = async (userId, applicationId) => {
     const companyId = await _getCompanyId(userId);
     const jobIds    = await _getJobIds(companyId);
 
-    const app = await Application.findOne({
-        where: { id: applicationId, job_id: jobIds }
+    const app = await prisma.application.findFirst({
+        where: { 
+            id:    applicationId, 
+            jobId: { in: jobIds }
+        }
     });
-    if (!app) throw new Error('Không tìm thấy đơn ứng tuyển hoặc bạn không có quyền thao tác.');
 
-    await app.destroy();
+    if (!app) {
+        throw new Error('Không tìm thấy đơn ứng tuyển hoặc bạn không có quyền thao tác.');
+    }
+
+    await prisma.application.update({
+        where: { id: applicationId },
+        data:  { isDeleted: true }
+    });
+
     return true;
 };
