@@ -4,7 +4,7 @@ const fs = require("fs");
 const ResumeVectorService = require("./resumeVector.services");
 const process = require("process");
 
-const UPLOAD_DIR = path.join(process.cwd(), "uploads", "resumes");
+const UPLOAD_DIR = path.join(process.cwd(), "src", "uploads", "resumes");
 
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -95,7 +95,7 @@ exports.deleteResume = async (userId, resumeId) => {
     throw new Error("Không tìm thấy CV hoặc bạn không có quyền xóa.");
   }
 
-  const filePath = path.join(process.cwd(), resume.fileUrl);
+  const filePath = path.join(process.cwd(), "src", resume.fileUrl);
   if (fs.existsSync(filePath)) {
     try {
       fs.unlinkSync(filePath);
@@ -129,8 +129,24 @@ exports.getFilePath = async (userId, resumeId) => {
   if (!resume) {
     throw new Error("Không tìm thấy CV hoặc bạn không có quyền xem.");
   }
-  const filePath = path.join(process.cwd(), resume.fileUrl);
-  if (!fs.existsSync(filePath)) {
+  const relativePath = resume.fileUrl.replace(/^\//, "");
+  const pathsToTry = [
+    path.join(process.cwd(), "src", relativePath),
+    path.join(process.cwd(), relativePath),
+    path.join(__dirname, "..", "..", "src", relativePath),
+    path.join(__dirname, "..", "..", relativePath)
+  ];
+
+  let filePath = null;
+  for (const p of pathsToTry) {
+    const resolvedPath = path.resolve(p);
+    if (fs.existsSync(resolvedPath)) {
+      filePath = resolvedPath;
+      break;
+    }
+  }
+
+  if (!filePath) {
     throw new Error("File CV không tồn tại trên server.");
   }
   return { filePath, fileName: resume.title };

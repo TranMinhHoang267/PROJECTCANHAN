@@ -69,6 +69,7 @@ exports.getApplicantsByJob = async (userId, jobId, filters = {}) => {
     total_pages: Math.ceil(count / pageSize),
     current_page: pageNumber,
     applications: applications.map((app) => ({
+      id: app.id,
       applicationId: app.id,
       status: app.status,
       coverLetter: app.coverLetter,
@@ -182,7 +183,12 @@ exports.getApplicationDetail = async (userId, applicationId) => {
           phone: true,
           avatarUrl: true,
           candidateProfile: {
-            include: {
+            select: {
+              id: true,
+              summary: true,
+              phone: true,
+              city: true,
+              gender: true,
               experiences: true,
               educations: true,
               skills: { include: { skill: true } },
@@ -205,7 +211,22 @@ exports.getApplicationDetail = async (userId, applicationId) => {
     );
   }
 
-  return app;
+  return {
+    applicationId: app.id,
+    status: app.status,
+    coverLetter: app.coverLetter,
+    resumeUrl: app.resumeUrl,
+    appliedAt: app.createdAt,
+    job: app.job,
+    candidate: {
+      id: app.user?.id,
+      fullName: app.user?.fullName,
+      email: app.user?.email,
+      phone: app.user?.phone,
+      avatarUrl: app.user?.avatarUrl,
+      candidateProfile: app.user?.candidateProfile || null
+    }
+  };
 };
 
 exports.getCvFile = async (userId, applicationId, mode = "view") => {
@@ -234,10 +255,32 @@ exports.getCvFile = async (userId, applicationId, mode = "view") => {
     };
   }
 
-  // const filePath = path.join(__dirname, '..', app.resumeUrl);
-  const filePath = path.join(process.cwd(), app.resumeUrl.replace(/^\//, ""));
-  if (!fs.existsSync(filePath))
+  const relativePath = app.resumeUrl.replace(/^\//, "");
+  
+  // Danh sách các khả năng đường dẫn tuyệt đối để tìm file
+  const pathsToTry = [
+    path.join(process.cwd(), "src", relativePath),
+    path.join(process.cwd(), relativePath),
+    path.join(__dirname, "..", "..", "src", relativePath),
+    path.join(__dirname, "..", "..", relativePath)
+  ];
+
+  let filePath = null;
+  for (const p of pathsToTry) {
+    const resolvedPath = path.resolve(p);
+    if (fs.existsSync(resolvedPath)) {
+      filePath = resolvedPath;
+      break;
+    }
+  }
+
+  if (!filePath) {
+    console.error('--- CV FILE NOT FOUND ---');
+    console.log('Tried these absolute paths:');
+    pathsToTry.forEach(p => console.log(' -', path.resolve(p)));
+    console.log('Database URL:', app.resumeUrl);
     throw new Error("File CV không tồn tại trên server.");
+  }
 
   return { filePath, fileName: path.basename(filePath), mode };
 };
@@ -245,9 +288,9 @@ exports.getCvFile = async (userId, applicationId, mode = "view") => {
 // ==============================================================================
 // 5. CẬP NHẬT TRẠNG THÁI ĐƠN ỨNG TUYỂN
 const VALID_TRANSITIONS = {
-    submitted:    ['under_review', 'rejected'],
-    under_review: ['interview',    'rejected'],
-    interview:    ['accepted',     'rejected'],
+    submitted:    ['under_review', 'accepted', 'rejected'],
+    under_review: ['interview', 'accepted', 'rejected'],
+    interview:    ['accepted', 'rejected'],
     accepted:     [],
     rejected:     []
 };
