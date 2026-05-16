@@ -1,6 +1,5 @@
 CREATE EXTENSION IF NOT EXISTS vector;
 
-
 -- CreateEnum
 CREATE TYPE "VECTOR_STATUS" AS ENUM ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED');
 
@@ -269,13 +268,13 @@ CREATE UNIQUE INDEX "bookmarks_user_id_job_id_key" ON "bookmarks"("user_id", "jo
 CREATE INDEX "resume_vectors_user_id_resume_id_idx" ON "resume_vectors"("user_id", "resume_id");
 
 -- CreateIndex
-CREATE INDEX "resume_vector_hnsw_idx" ON "resume_vectors"("embedding");
+CREATE INDEX "resume_vectors_hnsw_idx" ON "resume_vectors"("embedding");
 
 -- CreateIndex
 CREATE INDEX "job_vectors_user_id_job_id_idx" ON "job_vectors"("user_id", "job_id");
 
 -- CreateIndex
-CREATE INDEX "job_vector_hnsw_idx" ON "job_vectors"("embedding");
+CREATE INDEX "job_vectors_hnsw_idx" ON "job_vectors"("embedding");
 
 -- AddForeignKey
 ALTER TABLE "candidate_profiles" ADD CONSTRAINT "candidate_profiles_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -336,7 +335,6 @@ ALTER TABLE "job_vectors" ADD CONSTRAINT "job_vectors_job_id_fkey" FOREIGN KEY (
 
 -- AddForeignKey
 ALTER TABLE "job_vectors" ADD CONSTRAINT "job_vectors_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
 
 ALTER TABLE "job_vectors" ALTER COLUMN "embedding" TYPE vector(384);
 ALTER TABLE "resume_vectors" ALTER COLUMN "embedding" TYPE vector(384);
