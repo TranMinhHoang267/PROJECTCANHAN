@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const suggestion = require("../controllers/suggestion.controller");
+const suggestion = require("../controllers/chat.controller");
 const { authorize, protect } = require("../middleware/authMiddleware");
 const { ROLES } = require("../constants/roles");
 

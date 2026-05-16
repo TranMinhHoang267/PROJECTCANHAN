@@ -47,7 +47,7 @@ const adminJobRoutes = require("./src/routes/AdminJobRoutes");
 const adminReportRoutes = require("./src/routes/AdminReportRoutes");
 const adminRoutes = require("./src/routes/adminRoutes");
 const searchJobRoutes = require("./src/routes/Search_jobRoutes");
-const jobChatRoutes = require("./src/routes/suggestion.routers");
+const jobChatRoutes = require("./src/routes/chat.routers");
 const {
   setupVectorSchedule,
 } = require("./src/scheduler/vectorRetry.scheduler");

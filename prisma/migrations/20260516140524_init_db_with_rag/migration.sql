@@ -1,4 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS vector;
+
+
 -- CreateEnum
 CREATE TYPE "VECTOR_STATUS" AS ENUM ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED');
 
@@ -150,6 +152,7 @@ CREATE TABLE "resumes" (
     "title" TEXT NOT NULL,
     "file_url" TEXT NOT NULL,
     "is_default" BOOLEAN NOT NULL DEFAULT false,
+    "vector_status" "VECTOR_STATUS" NOT NULL DEFAULT 'PENDING',
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
@@ -168,6 +171,7 @@ CREATE TABLE "applications" (
     "resume_url" TEXT NOT NULL,
     "cover_letter" TEXT,
     "status" TEXT NOT NULL DEFAULT 'pending',
+    "is_deleted" BOOLEAN NOT NULL DEFAULT false,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
@@ -187,9 +191,10 @@ CREATE TABLE "bookmarks" (
 -- CreateTable
 CREATE TABLE "resume_vectors" (
     "id" UUID NOT NULL,
+    "user_id" UUID NOT NULL,
     "resume_id" UUID NOT NULL,
     "content" TEXT NOT NULL,
-    "embedding" vector,
+    "embedding" vector(384) NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
@@ -200,8 +205,9 @@ CREATE TABLE "resume_vectors" (
 CREATE TABLE "job_vectors" (
     "id" UUID NOT NULL,
     "job_id" UUID NOT NULL,
+    "user_id" UUID NOT NULL,
     "content" TEXT NOT NULL,
-    "embedding" vector,
+    "embedding" vector(384) NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
@@ -260,10 +266,16 @@ CREATE INDEX "bookmarks_user_id_job_id_idx" ON "bookmarks"("user_id", "job_id");
 CREATE UNIQUE INDEX "bookmarks_user_id_job_id_key" ON "bookmarks"("user_id", "job_id");
 
 -- CreateIndex
-CREATE INDEX "resume_vectors_resume_id_idx" ON "resume_vectors"("resume_id");
+CREATE INDEX "resume_vectors_user_id_resume_id_idx" ON "resume_vectors"("user_id", "resume_id");
 
 -- CreateIndex
-CREATE INDEX "job_vectors_job_id_idx" ON "job_vectors"("job_id");
+CREATE INDEX "resume_vector_hnsw_idx" ON "resume_vectors"("embedding");
+
+-- CreateIndex
+CREATE INDEX "job_vectors_user_id_job_id_idx" ON "job_vectors"("user_id", "job_id");
+
+-- CreateIndex
+CREATE INDEX "job_vector_hnsw_idx" ON "job_vectors"("embedding");
 
 -- AddForeignKey
 ALTER TABLE "candidate_profiles" ADD CONSTRAINT "candidate_profiles_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -317,4 +329,22 @@ ALTER TABLE "bookmarks" ADD CONSTRAINT "bookmarks_job_id_fkey" FOREIGN KEY ("job
 ALTER TABLE "resume_vectors" ADD CONSTRAINT "resume_vectors_resume_id_fkey" FOREIGN KEY ("resume_id") REFERENCES "resumes"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "resume_vectors" ADD CONSTRAINT "resume_vectors_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "job_vectors" ADD CONSTRAINT "job_vectors_job_id_fkey" FOREIGN KEY ("job_id") REFERENCES "jobs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "job_vectors" ADD CONSTRAINT "job_vectors_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+
+ALTER TABLE "job_vectors" ALTER COLUMN "embedding" TYPE vector(384);
+ALTER TABLE "resume_vectors" ALTER COLUMN "embedding" TYPE vector(384);
+
+CREATE INDEX IF NOT EXISTS job_vectors_hnsw_idx ON "job_vectors" 
+USING hnsw (embedding vector_cosine_ops) 
+WITH (m = 16, ef_construction = 64); 
+
+CREATE INDEX IF NOT EXISTS resume_vectors_hnsw_idx ON "resume_vectors" 
+USING hnsw (embedding vector_cosine_ops) 
+WITH (m = 16, ef_construction = 64);

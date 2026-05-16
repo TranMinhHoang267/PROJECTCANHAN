@@ -11,7 +11,8 @@ model ResumeVectors {
     resume Resume @relation("ResumeToExperience", fields: [resumeId], references: [id], onDelete: Cascade)
     user   User   @relation("UserToResumeVectors", fields: [userId], references: [id], onDelete: Cascade)
 
-    @@index([resumeId])
+    @@index([userId, resumeId])
+    @@index([embedding], map: "resume_vector_hnsw_idx")
     @@map("resume_vectors")
 }
 
@@ -28,6 +29,7 @@ model JobVectors {
     job  Job  @relation("JobToExperience", fields: [jobId], references: [id], onDelete: Cascade)
     user User @relation("UserToJobVectors", fields: [userId], references: [id], onDelete: Cascade)
 
-    @@index([jobId])
+    @@index([userId, jobId])
+    @@index([embedding], map: "job_vector_hnsw_idx")
     @@map("job_vectors")
 }

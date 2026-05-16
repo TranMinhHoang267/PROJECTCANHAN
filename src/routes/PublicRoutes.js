@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 const publicController = require('../controllers/PublicController');
-const suggestion = require("../controllers/suggestion.controller");
+const suggestion = require("../controllers/chat.controller");
 
 
 
