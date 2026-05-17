@@ -41,7 +41,7 @@ const promptTemplate = [
     - Nhóm 3: So sánh & Đánh giá (Khi người dùng muốn so sánh mức độ phù hợp của CV với Job, hoặc so sánh A với B).
     - Nhóm 4: Thông tin & Đánh giá Việc làm/Công ty (BẮT BUỘC vào nhóm này khi câu hỏi chỉ tập trung hỏi về thông tin công việc cụ thể, môi trường làm việc, văn hóa, hoặc "đánh giá công ty X").
     - Nhóm 5: Giao tiếp chung (Cảm ơn, chào hỏi, tạm biệt hoặc những câu hỏi mang tính chất xã giao).
-    - Nhóm 6: Cần yêu cầu cụ thể hơn (Nếu câu hỏi của người dùng quá chung chung và không thể xác định được trong bối cảnh của lịch sử chat).
+    - Nhóm 6: Cần yêu cầu cụ thể hơn (Nếu câu hỏi của người dùng quá chung chung và không thể xác định CHÍNH XÁC thực thể trong bối cảnh của lịch sử chat).
 
   QUY TẮC TRÍCH XUẤT THỰC THỂ (CRITICAL):
   1. CẤM trả về các từ chung chung như "cv", "job", "công việc này", "thực thể" trong mảng 'entities'.
@@ -56,12 +56,14 @@ const promptTemplate = [
   2. Chỉ dùng Type: "GENERAL" cho Nhóm 5 (Chào hỏi, tán gẫu). Các nhóm 1-4 PHẢI dùng đúng Type tương ứng.
   3. Khi dùng đại từ "nó", "công ty này", bạn PHẢI điền tên thật vào 'entities' và 'refined_question' như bạn vừa làm (rất tốt).
   4. ĐẶC BIỆT, xác định câu hỏi có khả năng ở nhóm nào trước, sau đó dựa vào bối cảnh của lịch sử chat để xác nhận lại nhóm dựa theo mức độ liên quan.
+  5. Trong trường hợp không xác định được thực thể, hãy phân loại vào nhóm 6, đồng thời 'refined_question' PHẢI là câu hỏi yêu cầu người dùng mô tả lại yêu cầu của câu hỏi trước.
 
   QUY TẮC TRẢ LỜI:
-  - 'group' chỉ gồm: 1, 2, 3, 4, 5.
+  - 'group' chỉ gồm: 1, 2, 3, 4, 5, 6.
   - 'type' chỉ gồm: "JOB", "COMPANY", "CV_VS_JOB", "GENERAL".
   - 'entities' sắp xếp theo: [Loại hồ sơ (cv), Tên Job cụ thể, Tên Company cụ thể, Địa điểm].
   - 'refined_question' PHẢI chứa đầy đủ các danh từ riêng đã trích xuất được để làm rõ ngữ nghĩa đồng thời PHẢI kiểm tra tính tương đồng ngữ nghĩa với câu hỏi gốc.
+  - Trong trường hợp yêu cầu của người dùng được phân loại vào nhóm 6, 'refined_question' PHẢI là câu hỏi yêu cầu người dùng mô tả lại yêu cầu của câu hỏi trước để bạn có thể hiểu rõ hơn.
 
   QUY TẮC TRÍCH XUẤT THỰC THỂ (LOGIC CỨNG):
     1. BẮT BUỘC 'entities' phải trả về theo đúng thứ tự 4 vị trí sau (nếu thiếu thì để chuỗi rỗng ""):
@@ -112,10 +114,8 @@ const promptTemplate = [
             - 'desc' chính là câu trả lời cho câu hỏi của người dùng, sử dụng thông tin được cung cấp và miêu tả lại bằng ngôn ngữ tự nhiên thay vì sử dụng key-value, 
         BẮT BUỘC trả về dạng JSON với cặp key-value theo mẫu sau:
           {
-            "ans": {
-                "id": string,
-                "desc": string,
-                }
+            "id": string,
+            "desc": string,   
           }`,
   },
   {
