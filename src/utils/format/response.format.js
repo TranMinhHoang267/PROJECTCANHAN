@@ -2,7 +2,7 @@ const TYPE = { failed: "FAILED", success: "SUCCESS" };
 /**
  *
  * @param {string} type
- * @param {String} [message]
+ * @param {String|Number} [message]
  * @param {Record<String,String>} [data]
  * @returns {Record<String,String>}
  */

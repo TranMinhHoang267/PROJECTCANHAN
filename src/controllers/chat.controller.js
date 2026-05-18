@@ -20,7 +20,8 @@ exports.chat = async (req, res) => {
       data: {
         userId: userId,
         question: question,
-        answer: ans.message ?? "",
+        template: ans.message,
+        answer: JSON.stringify(ans.data) ?? "",
       },
     });
 

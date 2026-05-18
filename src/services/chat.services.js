@@ -65,6 +65,8 @@ exports.chat = async (question, userId) => {
           return await _handleResearch(refined_question, type, entities);
         case 5:
           return await _handleGreeting(refined_question);
+        case 6:
+          return messageResponse(TYPE.success, refined_question);
         default:
           return messageResponse(
             TYPE.failed,
@@ -90,6 +92,7 @@ exports.history = async (userId) => {
       id: true,
       question: true,
       answer: true,
+      template: true,
       createdAt: true,
     },
     orderBy: { createdAt: "desc" },
@@ -308,34 +311,48 @@ const _handleComparison = async (refined_question, entities, type, userId) => {
       );
     }
 
-    // 2. Tìm Job mục tiêu
-    const job = await prisma.job.findFirst({
-      where: {
-        AND: [
-          { title: { contains: entities[1], mode: "insensitive" } },
-          entities[2]
-            ? {
-                company: {
-                  name: { contains: entities[2], mode: "insensitive" },
-                },
-              }
-            : {},
-        ],
-      },
-      include: { company: true, skills: { include: { skill: true } } },
-    });
+    const titleKeywords = entities[1]
+      ? entities[1].trim().split(/\s+/).join(".+")
+      : "";
+    const companyKeywords = entities[2]
+      ? entities[2].trim().split(/\s+/).join(".+")
+      : "";
+    // console.log("Title keywords regex:", titleKeywords);
+    // console.log("Company keywords regex:", companyKeywords);
+    const job = await prisma.$queryRaw`
+      SELECT 
+          j.id, 
+          j.title, 
+          j.description, 
+          j.salary_min as "salaryMin", 
+          j.salary_max as "salaryMax", 
+          j.location, 
+          j.job_type as "jobType",
+          s.name as "skills"
+      FROM "jobs" j
+      JOIN "companies" c ON j.company_id = c.id 
+      JOIN "job_skills" js ON j.id = js.job_id
+      JOIN "skills" s ON js.skill_id = s.id
+      WHERE 
+          j.title ~* ${titleKeywords}
+          AND c.name ~* ${companyKeywords}
+          
+          AND j.status = 'approved'
+          AND j.deadline >= NOW()
+`;
 
+    console.log("Job found for CV comparison:", job);
     if (!job)
       return messageResponse(
         TYPE.failed,
-        "Không tìm thấy thông tin công việc cụ thể để đánh giá.",
+        "Không tìm thấy thông tin công việc cụ thể để đánh giá. Vui lòng cung cấp nhiều thông tin hơn.",
       );
 
     // 3. SO SÁNH VECTOR: Lấy các đoạn CV liên quan nhất đến Job này (Sửa lỗi H3)
     // Giả sử bạn đã có vector của Job (đã lưu lúc tạo Job hoặc tạo mới tại đây)
     const jobVectors = await prisma.$queryRaw`
-    SELECT embedding::text FROM "job_vectors" 
-    WHERE job_id = ${job.id}
+      SELECT embedding::text FROM "job_vectors" 
+      WHERE job_id = ${job[0].id}
   `;
 
     // @ts-ignore
@@ -363,10 +380,10 @@ const _handleComparison = async (refined_question, entities, type, userId) => {
     const context = Array.from(new Set(relevantChunks)).join("\n---\n");
 
     const cleanResults = {
-      "Vị trí": job.title,
-      "Công ty": job.company.name,
-      "Yêu cầu & Mô tả": job.description,
-      "Kỹ năng yêu cầu": job.skills.map((s) => s.skill.name).join(", "),
+      "Vị trí": job[0].title,
+      "Công ty": job[0].companyName,
+      "Yêu cầu & Mô tả": job[0].description,
+      "Kỹ năng yêu cầu": job[0].skills,
     };
 
     // 4. Tạo Prompt an toàn về Token
@@ -497,6 +514,7 @@ const _handleJobSearch = async (question) => {
   }));
   const prompt = `Danh sách công việc (Dưới dạng JSON):\n${JSON.stringify(cleanResults, null, 2)}\n\nCâu hỏi của người dùng:\n${question}\n\n`;
   const response = await geminiGeneration(prompt, 0);
+  console.log("Response from Gemini for job search:", response);
   return response;
 };
 
@@ -578,6 +596,14 @@ const _handleJobSearchByCV = async (question, userId) => {
   ORDER BY j.id, jv.similarity DESC
   LIMIT 5;
 `;
+
+  // if (results.length === 0) {
+  //   return messageResponse(
+  //     TYPE.failed,
+  //     "Xin lỗi, tôi không tìm thấy công việc nào phù hợp với CV của bạn."
+  //   )
+  // }
+
   // @ts-ignore
   const cleanResults = results.map((job, index) => ({
     "Công việc số:": index + 1,
@@ -609,11 +635,17 @@ const _handleJobSearchByCV = async (question, userId) => {
 const _handleResearch = async (refined_question, type, entities) => {
   if (type === "COMPANY") {
     //find all information of the company
+
+    const whereClause = {};
+    if (entities[2] && entities[2].trim() !== "") {
+      whereClause.name = { contains: entities[2], mode: "insensitive" };
+    }
+    if (entities[3] && entities[3].trim() !== "") {
+      whereClause.city = { contains: entities[3], mode: "insensitive" };
+    }
+
     const company = await prisma.company.findFirst({
-      where: {
-        name: { contains: entities[2] ?? "", mode: "insensitive" },
-        city: { contains: entities[3] ?? {}, mode: "insensitive" },
-      },
+      where: whereClause,
       select: {
         id: true,
         name: true,

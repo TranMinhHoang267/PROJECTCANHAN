@@ -471,80 +471,61 @@ or
 }
 ```
 
-### 2.8 Job Chat & Vector Search (AI Assistant — RAG-powered)
+### 2.8 Job Chat & Vector Search (AI Assistant — Gemini-powered)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/chat/chat` | Ask a question about jobs (RAG-based) |
-| GET | `/api/chat-history/chat-history` | Get chat history |
+| POST | `/api/chat` | Ask a question about jobs (RAG-based) |
+| GET | `/api/chat-history` | Get chat history |
 | GET | `/api/public/job-suggestions` | Vector-based job search by filters (public, no auth) |
 
 **Auth:** Bearer Token, Role: `CANDIDATE` (for chat and chat-history). The `/api/public/job-suggestions` endpoint requires no auth (public).
 
-**Response Format (all RAG endpoints use messageResponse):**
-```json
-{ "type": "SUCCESS", "message": "...", [data]?: { ... } }
-```
+**Response Format:**
+The AI-driven endpoints return a standard response object. For a successful chat response, the structure is different from what is stored in the database.
 
 ---
 
 #### POST /api/chat/chat
 
-**Service:** `suggestion.services.js` → `chat(question, userId)`
+**Service:** `chat.services.js` → `chat(question, userId)`
 
-**Controller:** `suggestion.controller.js` → `chat` — stores Q&A in `userChat` table on SUCCESS only.
+**Controller:** `chat.controller.js` → `chat` — stores Q&A in the `userChat` table on success.
 
 **RAG Flow (Retrieval-Augmented Generation):**
-1. Fetch last 5 chat history entries for context
-2. LLM (Qwen 2.5 3B via Ollama) classifies question into a **group** (1–5):
-   - **Group 1 (JOB_SEARCH):** General job search → `_handleJobSearch()`
-   - **Group 2 (CV_MATCH):** Search by CV similarity → `_handleJobSearchByCV()`
-   - **Group 3 (COMPARISON):** Compare entities (jobs/companies/CV vs job) → `_handleComparison()`
-   - **Group 4 (COMPANY_RESEARCH):** Research company/job info → `_handleResearch()`
-   - **Group 5 (GREETING):** General greeting → `_handleGreeting()`
-3. Each handler:
-   - Converts question to **vector embedding** via HuggingFace API (`paraphrase-multilingual-MiniLM-L12-v2`, 384-dim)
-   - Performs **semantic search** on `job_vectors` using `pgvector` `<=>` cosine similarity with `MIN_SIMILARITY_SCORE` (default 0.3)
-   - Packages results + original question into a prompt
-   - Sends to **Qwen 2.5 3B** (Ollama, `http://localhost:11434`)
-   - Returns LLM-generated answer in Vietnamese
-
-**Group 1 — `_handleJobSearch(question)`:**
-- Embeds question → raw SQL with `<=>` on `job_vectors` → joins `jobs` + `companies`
-- Returns top 3 matches with `similarity` score → LLM generates natural answer
-- **Null handling:** `companyAddress ?? ""`, `companyCity ?? ""`
-
-**Group 2 — `_handleJobSearchByCV(question, userId)`:**
-- Finds user's default CV (requires `vectorStatus === 'COMPLETED'`)
-- Gets all `resume_vectors` embeddings → CROSS JOIN LATERAL against `job_vectors`
-- Returns top 5 matching jobs with similarity score → LLM generates answer
-- **Null handling:** `companyAddress ?? ""`, `companyCity ?? ""`, `job.location ?? ""`
-
-**Group 3 — `_handleComparison(question, entities, type, userId)`:**
-- **COMPANY type:** Searches companies by entity names → packages info → LLM compares
-- **JOB type:** Searches jobs by title → packages info → LLM compares
-- **CV_VS_JOB type:** Finds user's CV vectors → compares against target job vectors (threshold > 0.4) → LLM evaluates fit
-
-**Group 4 — `_handleResearch(question, type, entities)`:**
-- **COMPANY type:** Finds company by name + city → packages info → LLM answers
-- **JOB type:** Finds job by title + company name + location → packages info → LLM answers
-- **Null handling:** `company.city ?? "Không rõ"`
-
-**Group 5 — `_handleGreeting(question)`:**
-- Sends directly to LLM for conversational response
+The entire flow, from classification to final response generation, is handled by Google's Gemini model.
+1.  Fetch the last 5 chat history entries from the last 24 hours to provide context.
+2.  The **`gemini-3.1-flash-lite`** model classifies the user's question into a **group** (1–6) to determine intent, also extracting key entities.
+    -   **Group 1 (JOB_SEARCH):** General job search → `_handleJobSearch()`
+    -   **Group 2 (CV_MATCH):** Search for jobs based on the candidate's default CV → `_handleJobSearchByCV()`
+    -   **Group 3 (COMPARISON):** Compare multiple entities (jobs, companies, or a CV against a job) → `_handleComparison()`
+    -   **Group 4 (COMPANY_RESEARCH):** Research specific information about a company or job → `_handleResearch()`
+    -   **Group 5 (GREETING):** Handle general greetings → `_handleGreeting()`
+    -   **Group 6 (OTHER):** Handle questions outside the defined scopes.
+3.  Each handler function (`_handle...`) follows this process:
+    -   It may convert the question to a **vector embedding** using the HuggingFace API (`paraphrase-multilingual-MiniLM-L12-v2`, 384-dim).
+    -   It performs a **semantic search** on the `job_vectors` or `resume_vectors` tables using the `pgvector` `<=>` cosine similarity operator with a `MIN_SIMILARITY_SCORE` (default 0.3).
+    -   It packages the retrieved data and the original user question into a detailed prompt.
+    -   It sends the final prompt to **`gemini-3.1-flash-lite`** to generate a helpful, conversational answer in Vietnamese.
 
 **Request Body:**
 ```json
 { "question": "Tôi muốn tìm việc làm NodeJS ở HCM" }
 ```
 
-**Success (200) — messageResponse format:**
+**Live Success Response (200):**
+The live response from the endpoint contains the template ID in the `message` field and the actual response object in the `data` field.
+
 ```json
 {
   "type": "SUCCESS",
-  "message": "Tôi tìm thấy một số công việc NodeJS phù hợp tại Hồ Chí Minh..."
+  "message": 2,
+  "data": {
+    "message": "Xin chào! Tôi là trợ lý ảo của hệ thống tuyển dụng JobConnect. Tôi rất sẵn lòng hỗ trợ bạn tìm kiếm thông tin về việc làm hoặc giải đáp các thắc mắc về hệ thống của chúng tôi. Tôi có thể giúp gì cho bạn hôm nay?"
+  }
 }
 ```
+*Note: The frontend client receives the response object directly in the `data` field. The `message` field simply indicates which `promptTemplate` ID was used.*
 
 **Error Response:**
 ```json
@@ -558,24 +539,31 @@ or
 
 #### GET /api/chat-history/chat-history
 
-**Service:** `suggestion.services.js` → `history(userId)`
+**Service:** `chat.services.js` → `history(userId)`
 
-**Controller:** `suggestion.controller.js` → `chatHistory`
+**Controller:** `chat.controller.js` → `chatHistory`
 
 Returns all past Q&A sessions for the authenticated candidate (ordered by `createdAt DESC`).
 
 **Success (200):**
+The `answer` field in the history contains the **stringified JSON** of the `data` object from the original response. The `template` field stores the template ID.
+
 ```json
 {
-  "history": [
-    {
-      "id": "UUID",
-      "userId": "UUID",
-      "question": "Tôi muốn tìm việc NodeJS",
-      "answer": "Tôi tìm thấy...",
-      "createdAt": "2025-01-01T00:00:00.000Z"
+    "type": "SUCCESS",
+    "message": "Lịch sử chat của bạn",
+    "data": {
+        "history": [
+            {
+                "id": "UUID",
+                "question": "Chào bạn",
+                "answer": "{\"message\":\"Xin chào! Tôi là trợ lý ảo của hệ thống tuyển dụng JobConnect. Tôi rất sẵn lòng hỗ trợ bạn tìm kiếm thông tin về việc làm hoặc giải đáp các thắc mắc về hệ thống của chúng tôi. Tôi có thể giúp gì cho bạn hôm nay?\"}",
+                "template": 2,
+                "createdAt": "2026-05-18T05:27:01.026Z"
+            }
+        ],
+        "isFrozen": false
     }
-  ]
 }
 ```
 
@@ -583,9 +571,9 @@ Returns all past Q&A sessions for the authenticated candidate (ordered by `creat
 
 #### GET /api/public/job-suggestions
 
-**Service:** `suggestion.services.js` → `getJobSuggestions(userId, filters)` — `userId` is accepted but not used (public endpoint).
+**Service:** `chat.services.js` → `getJobSuggestions(userId, filters)` — `userId` is accepted but not used (public endpoint).
 
-**Controller:** `suggestion.controller.js` → `getJobSuggestions`
+**Controller:** `chat.controller.js` → `getJobSuggestions`
 
 **Auth:** None (public). No `Authorization` header required.
 
@@ -599,11 +587,12 @@ Returns all past Q&A sessions for the authenticated candidate (ordered by `creat
 | salary | string | No | Minimum salary filter |
 
 **Flow:**
-1. Build prompt with filters → LLM (Qwen 2.5 3B via Ollama) refines the search query
-2. Clean via `cleaningText()` + standardize via `textStandardization()` → embed via HuggingFace API
-3. Embedding string converted: `` ${JSON.stringify(embedding)} `` → semantic search on `job_vectors` using `<=>` cosine similarity (threshold `MIN_SIMILARITY_SCORE`, default 0.3)
-4. Fetch full job details with company + skills for matching IDs
-5. Return via `messageResponse` wrapped in `{ suggestions: { ... } }`
+1.  Build a prompt with user-provided filters.
+2.  The **`gemini-3.1-flash-lite`** model refines this into an optimized search query.
+3.  The refined query is cleaned, standardized, and embedded via the HuggingFace API.
+4.  The resulting embedding is used to perform a semantic search on the `job_vectors` table (cosine similarity, threshold `MIN_SIMILARITY_SCORE` of 0.3).
+5.  Full job details are fetched for the top matching results.
+6.  The final list is returned in a standard response format.
 
 **Success (200):**
 ```json
@@ -640,7 +629,7 @@ Returns all past Q&A sessions for the authenticated candidate (ordered by `creat
 }
 ```
 
-**Error (200 — messageResponse):**
+**Error (200 — within the `suggestions` object):**
 ```json
 {
   "suggestions": {
@@ -1397,6 +1386,7 @@ or
 |-------|---------|-------------|
 | `job_vectors` | Job description embeddings | `job_id`, `content`, `embedding` (vector(384)) |
 | `resume_vectors` | Resume PDF embeddings | `user_id`, `resume_id`, `content`, `embedding` (vector(384)) |
+| `user_chat` | Chat Q&A history with dynamic template responses | `id` (UUID), `user_id`, `question`, `answer` (stringified JSON), `template` (Integer — identifies the response structure format corresponding to the `promptTemplate` ID), `created_at` |
 
 ### 7.4 Similarity Search Queries
 

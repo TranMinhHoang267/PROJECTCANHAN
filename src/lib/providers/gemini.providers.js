@@ -20,7 +20,7 @@ async function geminiGeneration(prompt, templateIndex) {
     const genAI = new GoogleGenerativeAI(key);
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.1-flash-lite",
       generationConfig: { responseMimeType: "application/json" },
     });
     // Kết hợp template và prompt của Hào
@@ -38,7 +38,7 @@ async function geminiGeneration(prompt, templateIndex) {
     try {
       // Thử parse bằng JSON chuẩn trước
       const formatResult = JSON.parse(text);
-      return messageResponse(TYPE.success, "", formatResult);
+      return messageResponse(TYPE.success, templateIndex, formatResult);
     } catch (standardError) {
       console.warn(
         "JSON chuẩn thất bại, đang cố gắng cứu vãn bằng dirty-json...",

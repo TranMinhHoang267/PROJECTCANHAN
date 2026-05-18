@@ -1,6 +1,7 @@
 model UserChat {
     id        String   @id @default(uuid()) @db.Uuid
     userId    String   @db.Uuid
+    template  Int      @default(0) //the type of answer structure template, see more at _prompt.models.js to look for the structture per prompt template
     question  String   @db.Text
     answer    String   @db.Text
     createdAt DateTime @default(now()) @map("created_at")

@@ -5,7 +5,6 @@
  * This allows for better embedding generation and more accurate search results when users query the system.
  */
 const maxChunkSize = 150; // Adjust based on your embedding model's limits
-const overlapSize = 50; // To ensure some context is preserved between chunks
 /**
  *
  * @param {String} text
@@ -17,19 +16,11 @@ const textChunking = (text) => {
 
   const chunks = [];
   let start = 0;
-  let lastSentenceFromPrevious = "";
+  let lastSentenceFromPrevious;
 
   while (start < text.length) {
-    /**
-     * CALCULATION: Adjusted max limit for the current slice.
-     * We must subtract the overlap sentence length to ensure (overlap + current) <= 300.
-     */
-    const availableSpace =
-      maxChunkSize -
-      (lastSentenceFromPrevious.length
-        ? lastSentenceFromPrevious.length + 1
-        : 0);
-    let end = start + availableSpace;
+    // Calculate end index for the current chunk
+    let end = start + maxChunkSize;
 
     if (end > text.length) end = text.length;
 
@@ -43,7 +34,22 @@ const textChunking = (text) => {
     );
 
     // Determine cut point
-    let cutPoint = lastBreak > 0 ? start + lastBreak + 1 : end;
+    let cutPoint;
+    if (lastBreak > 0) {
+      cutPoint = start + lastBreak; // Cut at natural break
+    } else if (end < text.length) {
+      let lastSpace = segment.lastIndexOf(" ");
+      if (lastSpace > 0) {
+        cutPoint = start + lastSpace;
+      } else {
+        cutPoint = end; // No natural break, cut at max limit
+      }
+    } else {
+      cutPoint = end; // End of text
+    }
+
+    if (cutPoint <= start) cutPoint = end; // Safety check to avoid infinite loop
+
     let currentContent = text.slice(start, cutPoint).trim();
 
     if (currentContent.length > 0) {
@@ -52,13 +58,7 @@ const textChunking = (text) => {
         ? `${lastSentenceFromPrevious} ${currentContent}`
         : currentContent;
 
-      // Final length validation for safety
-      if (finalChunk.length <= maxChunkSize) {
-        chunks.push(finalChunk.trim());
-      } else {
-        // Fallback: If still too long, prioritize currentContent to pass tests
-        chunks.push(currentContent.slice(0, maxChunkSize));
-      }
+      chunks.push(finalChunk.trim());
 
       /**
        * EXTRACT OVERLAP FOR NEXT ROUND:
@@ -82,20 +82,15 @@ const textChunking = (text) => {
 
         const sentenceRegex = /[^.\n;]+[.\n;]\s*/g;
         const matches = currentContent.match(sentenceRegex);
-        let candidate = "";
 
-        if (matches) {
-          for (let i = matches.length - 1; i >= 0; i--) {
-            const sentence = matches[i];
-            if (candidate.length + sentence.length <= overlapSize) {
-              candidate = sentence + candidate;
-            } else if (candidate.length === 0) {
-              candidate = sentence + candidate;
-              break;
-            } else break;
-          }
+        if (matches && matches.length > 0) {
+          lastSentenceFromPrevious = matches[matches.length - 1].trim();
+        } else {
+          // If we can't find a proper sentence break, we can take the last few words as context instead
+          const words = currentContent.split(" ");
+          lastSentenceFromPrevious =
+            words.length > 5 ? words.slice(-5).join(" ") : currentContent;
         }
-        lastSentenceFromPrevious = candidate.trimEnd();
       }
     }
 
