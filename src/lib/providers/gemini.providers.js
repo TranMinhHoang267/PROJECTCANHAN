@@ -1,7 +1,11 @@
 require("dotenv").config();
 const djson = require("dirty-json");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
-const promptTemplate = require("./_prompt.models");
+const {
+  promptTemplate,
+  promptInternalTemplate,
+  promptRecriterTemplate,
+} = require("./_prompt.models");
 const { messageResponse, TYPE } = require("../../utils/format/response.format");
 
 const key = process.env.GG_API_KEY;
@@ -13,9 +17,25 @@ console.log("GEMINI_API_KEY is set, proceeding with initialization.", {
   key,
 });
 
-// Khởi tạo SDK với Key của Hào
+const TEMPLATE_TYPE = {
+  general: "GENERAL",
+  internal: "INTERNAL",
+  recruiter: "RECRUITER",
+};
 
-async function geminiGeneration(prompt, templateIndex) {
+// Khởi tạo SDK với Key của Hào
+/**
+ *
+ * @param {String} prompt
+ * @param {TEMPLATE_TYPE} templateType -
+ * @param {Number} templateIndex
+ * @returns
+ */
+async function geminiGeneration(
+  prompt,
+  templateIndex,
+  templateType = TEMPLATE_TYPE.general,
+) {
   try {
     const genAI = new GoogleGenerativeAI(key);
 
@@ -23,9 +43,21 @@ async function geminiGeneration(prompt, templateIndex) {
       model: "gemini-3.1-flash-lite",
       generationConfig: { responseMimeType: "application/json" },
     });
-    // Kết hợp template và prompt của Hào
-    const systemInstruction = promptTemplate[templateIndex || 0].content;
-    const finalPrompt = `${systemInstruction}\n\nUser request: ${prompt}`;
+    let template;
+
+    switch (templateType) {
+      case TEMPLATE_TYPE.recruiter:
+        template = promptRecriterTemplate;
+        break;
+      case TEMPLATE_TYPE.internal:
+        template = promptInternalTemplate;
+        break;
+      default:
+        template = promptTemplate;
+    }
+
+    const systemInstruction = template[templateIndex || 0].content;
+    const finalPrompt = `${systemInstruction}\n\n ${prompt}`;
 
     const result = await model.generateContent(finalPrompt);
     const response = await result.response;
@@ -60,4 +92,5 @@ async function geminiGeneration(prompt, templateIndex) {
 
 module.exports = {
   geminiGeneration,
+  TEMPLATE_TYPE,
 };

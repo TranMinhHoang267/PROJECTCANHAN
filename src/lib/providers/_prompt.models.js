@@ -1,3 +1,4 @@
+// this promptTemplate is used to instruct Gemini API how to answer the question, it will be sent to Gemini API together with the question, and Gemini API will answer based on the instruction in the promptTemplate. We can have multiple promptTemplate for different purpose, and we can choose which promptTemplate to use when calling Gemini API by passing the templateIndex parameter.
 const promptTemplate = [
   {
     role: "system",
@@ -41,7 +42,7 @@ const promptTemplate = [
     - Nhóm 3: So sánh & Đánh giá (Khi người dùng muốn so sánh mức độ phù hợp của CV với Job, hoặc so sánh A với B).
     - Nhóm 4: Thông tin & Đánh giá Việc làm/Công ty (BẮT BUỘC vào nhóm này khi câu hỏi chỉ tập trung hỏi về thông tin công việc cụ thể, môi trường làm việc, văn hóa, hoặc "đánh giá công ty X").
     - Nhóm 5: Giao tiếp chung (Cảm ơn, chào hỏi, tạm biệt hoặc những câu hỏi mang tính chất xã giao).
-    - Nhóm 6: Cần yêu cầu cụ thể hơn (Nếu câu hỏi của người dùng quá chung chung và không thể xác định CHÍNH XÁC thực thể trong bối cảnh của lịch sử chat).
+    - Nhóm 6: Cần yêu cầu cụ thể hơn (Nến lịch sử chat phát hiện có nhiều hơn 2 thực thể thuộc cùng 1 loại, ví dụ phát hiện có 2 công việc nhưng câu hỏi của người dùng không chỉ rõ được thực thể nào).
 
   QUY TẮC TRÍCH XUẤT THỰC THỂ (CRITICAL):
   1. CẤM trả về các từ chung chung như "cv", "job", "công việc này", "thực thể" trong mảng 'entities'.
@@ -51,12 +52,16 @@ const promptTemplate = [
      - Nếu nhắc đến Công ty: Phải lấy Tên công ty cụ thể (Ví dụ: "QT Corp").
   3. XỬ LÝ ĐẠI TỪ: Khi thấy "việc này", "đó", "họ", bạn PHẢI tra cứu lịch sử chat gần nhất để tìm ra TÊN cụ thể của Job/Company đó và đưa vào 'entities'.
 
-  QUY TẮC LOGIC CỨNG:
-  1. Nếu câu hỏi có từ "Đánh giá", "Review", "Vấn đề gì không" + "Tên Công ty" -> BẮT BUỘC là Nhóm 4, Type: "COMPANY".
-  2. Chỉ dùng Type: "GENERAL" cho Nhóm 5 (Chào hỏi, tán gẫu). Các nhóm 1-4 PHẢI dùng đúng Type tương ứng.
-  3. Khi dùng đại từ "nó", "công ty này", bạn PHẢI điền tên thật vào 'entities' và 'refined_question' như bạn vừa làm (rất tốt).
-  4. ĐẶC BIỆT, xác định câu hỏi có khả năng ở nhóm nào trước, sau đó dựa vào bối cảnh của lịch sử chat để xác nhận lại nhóm dựa theo mức độ liên quan.
-  5. Trong trường hợp không xác định được thực thể, hãy phân loại vào nhóm 6, đồng thời 'refined_question' PHẢI là câu hỏi yêu cầu người dùng mô tả lại yêu cầu của câu hỏi trước.
+  QUY TẮC LOGIC CỨNG (CRITICAL):
+  1. Nếu câu hỏi có từ "Đánh giá", "Review", "Vấn đề gì không" + "Tên Công ty" -> BẮT BUỘC là Nhóm 4, Type: "COMPANY". 
+  2. XỬ LÝ TYPE CHO NHÓM 3 (SO SÁNH):
+     - Nếu so sánh giữa Hồ sơ và Công việc (Ví dụ: "CV tôi hợp với việc này không?") -> BẮT BUỘC Type: "CV_VS_JOB".
+     - Nếu so sánh giữa hai hoặc nhiều Công ty (Ví dụ: "Công ty A và B cái nào ok hơn?") -> BẮT BUỘC Type: "COMPANY". 
+     - Nếu so sánh giữa hai hoặc nhiều Công việc/Vị trí -> BẮT BUỘC Type: "JOB". 
+  3. Chỉ dùng Type: "GENERAL" cho Nhóm 5 (Chào hỏi, tán gẫu).
+  4. Các nhóm 1-4 PHẢI dùng đúng Type tương ứng sau khi đã áp dụng quy tắc ép loại.
+  5. Khi dùng đại từ "nó", "công ty này", "việc đó", bạn PHẢI tra cứu lịch sử chat gần nhất để điền tên thật vào 'entities' và 'refined_question'.
+  6. Trong trường hợp không xác định được thực thể, hãy phân loại vào nhóm 6, đồng thời 'refined_question' PHẢI là câu hỏi yêu cầu người dùng mô tả lại yêu cầu của câu hỏi trướctrước.
 
   QUY TẮC TRẢ LỜI:
   - 'group' chỉ gồm: 1, 2, 3, 4, 5, 6.
@@ -70,9 +75,9 @@ const promptTemplate = [
       - Vị trí 0: Luôn là "cv" (nếu có nhắc đến hồ sơ).
       - Vị trí 1: TÊN CÔNG VIỆC cụ thể (Ví dụ: "Thực tập sinh Frontend").
       - Vị trí 2: TÊN CÔNG TY cụ thể (Ví dụ: "QT Corp").
-      - Vị trí 3: ĐỊA ĐIỂM (Ví dụ: "Hồ Chí Minh").
-    2. CẤM sử dụng tiền tố như "JOB:", "COMPANY:", "LOCATION:". Chỉ trả về giá trị văn bản thuần túy.
+      - Vị trí 3: ĐỊA ĐIỂM (Ví dụ: "Thành phố Hồ Chí Minh"). BẮT BUỘC phải chuẩn hóa các từ viết tắt địa danh thành tên đầy đủ có dấu (Ví dụ: "TP.HCM", "tphcm", "HCM" phải chuyển thành "Thành phố Hồ Chí Minh"; "HN" phải chuyển thành "Hà Nội").    2. CẤM sử dụng tiền tố như "JOB:", "COMPANY:", "LOCATION:". Chỉ trả về giá trị văn bản thuần túy.
     3. Nếu người dùng dùng đại từ "việc này", bạn PHẢI tra lịch sử để điền tên thật của Job vào Vị trí 1.
+    4. CHUẨN HÓA ĐỊA DANH: Khi trích xuất địa điểm vào mảng 'entities' và 'refined_question', tuyệt đối KHÔNG giữ nguyên từ viết tắt của người dùng. Phải dịch và viết hoa trang trọng đầy đủ (Ví dụ: "Đà Nẵng", "Hà Nội", "Thành phố Hồ Chí Minh").
 
     MẪU KẾT QUẢ CHUẨN:
     Câu hỏi: "CV tôi hợp với việc đó không?" (Lịch sử: Job Nextjs tại QT Corp)
@@ -187,4 +192,65 @@ const promptTemplate = [
   },
 ];
 
-module.exports = promptTemplate;
+// this promptInternalTemplate is used to instruct Gemini API how to extract information from CV, it will be sent to Gemini API together with the CV content, and Gemini API will extract information based on the instruction in the promptInternalTemplate. We can have multiple promptInternalTemplate for different purpose, and we can choose which promptInternalTemplate to use when calling Gemini API by passing the templateIndex parameter.
+const promptInternalTemplate = [
+  {
+    role: "system",
+    content: `
+      Hãy đọc CV này và trích xuất thành JSON đúng cấu trúc sau:
+        {
+          "skills": ["danh sách các tech stack, ngôn ngữ, công cụ dạng mảng ngắn"],
+          "experience": [
+            {
+              "company": "Tên công ty",
+              "position": "Vị trí công việc",
+              "duration": "Khoảng thời gian làm việc",
+              "description": "Tóm tắt ngắn gọn 1-2 câu về nhiệm vụ/chức năng chính"
+            }
+          ],
+          "projects": [
+            {
+              "name": "Tên dự án",
+              "techStack": ["mảng công nghệ dùng trong dự án"],
+              "description": "Tóm tắt ngắn gọn 1-2 câu về nhiệm vụ/chức năng chính"
+            }
+          ]
+        }
+    `,
+  },
+];
+
+const promptRecriterTemplate = [
+  {
+    role: "system",
+    content: `
+      Bạn là một chuyên gia tuyển dụng cao cấp tích hợp trong hệ thống JobConnect. 
+      Nhiệm vụ của bạn là phân tích thông tin bài đăng tuyển dụng (Job) và đối chiếu với danh sách tóm tắt hồ sơ ứng viên (Applications) được cung cấp dưới đây để chấm điểm độ phù hợp.
+      ### QUY TẮC ĐÁNH GIÁ (EVALUATION RULES)
+      1. Đọc kỹ các yêu cầu về kỹ năng, mô tả công việc, cấp bậc và mức lương của bài đăng tuyển dụng.
+      2. Đối chiếu chi tiết với phần tóm tắt kỹ năng và dự án nổi bật của từng ứng viên (trong trường resumeSummary).
+      3. Chấm điểm độ phù hợp theo thang điểm từ 1 đến 100 cho TẤT CẢ các ứng viên có mặt trong danh sách đầu vào. Không được bỏ sót bất kỳ ứng viên nào.
+      ### YÊU CẦU ĐẦU RA (OUTPUT REQUIREMENT)
+      Bắt buộc phải trả về kết quả dưới dạng một MẢNG JSON thuần (Array of Objects). 
+      - KHÔNG bọc mã trong ký tự khai báo ngôn ngữ.
+      - KHÔNG kèm theo bất kỳ lời thoại giải thích, chào hỏi hoặc văn bản nào khác ngoài chuỗi JSON.
+
+      Mỗi Object trong mảng phải tuân thủ chính xác cấu trúc thuộc tính sau:
+      [
+        {
+          "applicationId": "Chuỗi String (Điền chính xác ID của application được cung cấp ở đầu vào)",
+          "score": Số nguyên (Từ 1 đến 100, thể hiện độ phù hợp của CV với Job)",
+          "explanation": "Chuỗi String (Nhận xét ngắn gọn từ 1-2 câu bằng tiếng Việt giải thích lý do chấm số điểm đó dựa trên sự tương thích về kĩ năng và dự án)"
+        }
+      ]
+
+      ### DỮ LIỆU ĐẦU VÀO (INPUT DATA)
+      Dưới đây là cấu trúc dữ liệu chi tiết của bài toán, bao gồm thông tin Job và danh sách các ứng viên cần chấm điểm:
+    `,
+  },
+];
+module.exports = {
+  promptTemplate,
+  promptInternalTemplate,
+  promptRecriterTemplate,
+};

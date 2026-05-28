@@ -915,7 +915,75 @@ Soft-deletes the application via `isDeleted: true`.
 { "message": "Xóa đơn ứng tuyển thành công." }
 ```
 
-### 3.4 Dashboard
+### 3.4 Recruiter AI (Candidate Evaluation)
+
+This feature provides a "General Evaluation" (Chấm điểm toàn bộ) for all applicants of a specific job, leveraging an AI model to score and provide a brief explanation for each candidate's suitability.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/smart/scoring-cv` | Evaluate all applicants for a specific job and return scores. |
+
+#### POST /api/smart/scoring-cv
+
+**Auth:** Bearer Token, Role: `RECRUITER`
+
+**Service:** `smart.services.js` (core logic)
+
+Triggers an evaluation of all applicants for a given `jobId`. To manage large datasets and avoid context limitations, the backend processes applications in sequential batches. The final response is a complete, unsorted array of all evaluations, with sorting and filtering delegated to the frontend client.
+
+Under the hood, the service compiles a unified data object for the evaluation context:
+```javascript
+const cleanResult = {
+  jobId: job.id,
+  jobTitle: job.title,
+  jobDescription: job.description,
+  jobSalaryMin: job.salaryMin,
+  jobSalaryMax: job.salaryMax,
+  jobType: job.jobType,
+  jobLevel: job.jobLevel,
+  jobSkills: job.skills.map((s) => s.skill),
+  applications: job.applications.map((app) => ({
+    applicationId: app.id,
+    resumeId: app.resume.id,
+    resumeSummary: app.resume.summary, // Pre-structured JSON or condensed text profile
+  })),
+};
+```
+
+**Request Body:**
+```json
+{
+  "jobId": "uuid-of-the-job"
+}
+```
+
+**Success (200):**
+Returns a flat, complete array containing an evaluation for every applicant.
+```json
+{
+  "status": "success",
+  "message": "Đánh giá toàn bộ ứng viên thành công.",
+  "data": [
+    {
+      "applicationId": "uuid-for-app-1",
+      "score": 92,
+      "explanation": "Ứng viên có kinh nghiệm dày dặn về NodeJS và làm việc với các hệ thống phân tán, rất phù hợp với yêu cầu."
+    },
+    {
+      "applicationId": "uuid-for-app-2",
+      "score": 75,
+      "explanation": "Hồ sơ có kỹ năng phù hợp nhưng kinh nghiệm làm việc thực tế còn ít."
+    },
+    {
+      "applicationId": "uuid-for-app-3",
+      "score": 85,
+      "explanation": "Kinh nghiệm và kỹ năng đáp ứng tốt yêu cầu công việc, là một ứng viên tiềm năng."
+    }
+  ]
+}
+```
+
+### 3.5 Dashboard
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -1370,6 +1438,7 @@ or
       v                                                   v
   vectorStatus: COMPLETED                          resume_vectors table
 ```
+**Note on implementation:** The text preprocessing and chunking utilities for this lifecycle are now located in `src/modules/job/chunking.js`.
 
 ### 7.2 Embedding Model
 
@@ -1419,6 +1488,10 @@ WHERE jv.job_id = j.id
 - **Resume vectorization:** Fires `setImmediate` after upload — not awaited
 - **Scheduler:** `vectorRetry.scheduler.js` runs every 30 min via `node-cron`, retries jobs/resumes with `vectorStatus: PENDING` or `FAILED` (batch size: 5 jobs, unlimited resumes)
 - **Exports:** `setupVectorSchedule()`, `stopVectorSchedule()` (used in test cleanup)
+
+### 7.6 Architectural Shift: Backend vs. Frontend Roles
+
+The system's architecture has been updated to delegate distinct responsibilities for AI-driven features. The **Backend** is responsible for processing and returning raw, unsorted data (e.g., the complete list of candidate scores for a job). The **Frontend** client is then responsible for all data presentation logic, including sorting (`.sort()`), filtering, and pagination/slicing. This approach maximizes UI flexibility and allows for efficient client-side caching.
 
 ---
 

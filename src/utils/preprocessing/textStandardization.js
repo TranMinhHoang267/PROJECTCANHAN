@@ -5,6 +5,7 @@ const { STOP_WORDS, ABBREVIATIONS, TECH_MAPPING } = require("./_utils");
  * This is important for Vietnamese text because it can be represented in multiple ways (e.g., using combining characters or precomposed characters). Normalizing to NFC form ensures that all characters are represented in a consistent way, which can improve the quality of text processing and embedding.
  * Additionally, we convert the text to lowercase to further standardize it and reduce the number of unique tokens, which can help improve the quality of embeddings and search results.
  * @param {*} text
+ * @returns {String}
  */
 const normalizeVietnamese = (text) => {
   if (typeof text !== "string") return text;
@@ -46,6 +47,7 @@ const handleAbbreviations = (text) => {
     );
     text = text.replace(regex, full);
   }
+  console.log("After handling abbreviations:", text);
   return text;
 };
 
@@ -57,7 +59,7 @@ const handleAbbreviations = (text) => {
  */
 // Hàm thoát các ký tự đặc biệt trong Regex
 const escapeRegExp = (string) => {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); 
+  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 };
 
 const standardizationOfCommonWords = (text) => {
@@ -65,12 +67,12 @@ const standardizationOfCommonWords = (text) => {
 
   Object.keys(TECH_MAPPING).forEach((key) => {
     // Escape key trước khi tạo RegExp để tránh lỗi 'c++' hay '.net'
-    const escapedKey = escapeRegExp(key); 
+    const escapedKey = escapeRegExp(key);
     const regex = new RegExp(escapedKey, "gi");
-    
+
     result = result.replace(regex, TECH_MAPPING[key]);
   });
-
+  console.log("After standardization of common words:", result);
   return result;
 };
 
@@ -90,11 +92,13 @@ const removeStopWords = (text) => {
   if (typeof text !== "string") return text;
 
   //merge stop words into a regex pattern for efficient replacement
-  const pattern = `\\b (${STOP_WORDS.join("|")}) \\b`;
+  const pattern = `(?<=^|\\s)(${STOP_WORDS.join("|")})(?=\\s|$)`;
   const regex = new RegExp(pattern, "gi");
 
   // Replace stop words with an empty string, then reduce multiple spaces to a single space and trim the result
-  return text.replace(regex, " ").replace(/\s+/g, " ").trim();
+  const result = text.replace(regex, " ").replace(/\s+/g, " ").trim();
+  console.log("After removing stop words:", result);
+  return result;
 };
 
 /**
@@ -109,7 +113,6 @@ const textStandardization = (text) => {
       standardizationOfCommonWords(normalizeVietnamese(text)),
     ),
   );
-  console.log("Standardized text:", result);
   return result;
 };
 

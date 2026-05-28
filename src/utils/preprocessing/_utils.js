@@ -1,5 +1,7 @@
 const STOP_WORDS = [
   "và",
+  "không",
+  "có",
   "với",
   "cho",
   "của",
@@ -263,33 +265,33 @@ const TECH_MAPPING = {
 
   // Mobile & Cross-platform
   "react native": "reactnative",
-  "flutter": "flutter",
-  "kotlin": "kotlin",
-  "swift": "swift",
-  "dart": "dart",
+  flutter: "flutter",
+  kotlin: "kotlin",
+  swift: "swift",
+  dart: "dart",
 
   // Databases & Storage (Để lọc Job theo Stack dữ liệu)
-  "mongodb": "mongodb",
+  mongodb: "mongodb",
   "mongo db": "mongodb",
-  "postgresql": "postgresql",
-  "postgres": "postgresql",
-  "mysql": "mysql",
+  postgresql: "postgresql",
+  postgres: "postgresql",
+  mysql: "mysql",
   "sql server": "sqlserver",
-  "mssql": "sqlserver",
-  "redis": "redis",
-  "elasticsearch": "elasticsearch",
+  mssql: "sqlserver",
+  redis: "redis",
+  elasticsearch: "elasticsearch",
 
   // DevOps, Cloud & Tools
-  "aws": "amazonwebservices",
+  aws: "amazonwebservices",
   "amazon web services": "amazonwebservices",
   "google cloud": "gcp",
-  "azure": "azure",
-  "docker": "docker",
-  "kubernetes": "k8s",
-  "jenkins": "jenkins",
+  azure: "azure",
+  docker: "docker",
+  kubernetes: "k8s",
+  jenkins: "jenkins",
   "github actions": "githubactions",
   "ci/cd": "cicd",
-  "cicd": "cicd",
+  cicd: "cicd",
 
   // Big Data & AI
   "machine learning": "machinelearning",

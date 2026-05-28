@@ -1,1345 +1,1707 @@
 {
-	"info": {
-		"name": "JobConnect Recruitment System (Express.js)",
-		"description": "Full API collection for JobConnect recruitment system built with Express.js, Prisma ORM, and PostgreSQL (pgvector). Features RAG-powered AI chat with Ollama/Qwen2.5, vector-based CV-job matching, and semantic search.\n\n## Framework\n- **Backend:** Express.js (Controller-Service architecture)\n- **ORM:** Prisma (multi-file schema with prismaSchemaFolder)\n- **Database:** PostgreSQL with pgvector extension\n- **AI:** HuggingFace Inference API (embeddings) + Ollama Qwen2.5 3B (text generation)\n\n## Pre-Requisites\n1. Create a Postman Environment with:\n   - `baseUrl` = `http://localhost:3000`\n   - `accessToken` (populated automatically by Login script)\n   - `refreshToken` (populated automatically by Login script)\n   - `resumeId` (populated by CV Upload script)\n   - `jobId` (populated by Search script)\n   - `companyId` (populated by Search/Job Detail script)\n   - `applicationId` (populated by Apply Job response)\n\n## Auth Flow\nLogin → accessToken auto-saved → all protected endpoints use `{{accessToken}}` via the collection-level Authorization header.\n\n## Response Format\nAll chat/vector/suggestion endpoints return `messageResponse` format:\n```json\n{ \"type\": \"SUCCESS\"|\"FAILED\", \"message\": \"...\", \"data\": {...} }\n```\nController endpoints (non-chat) return:\n```json\n{ \"status\": \"success\", \"data\": {...} }\n```\nor\n```json\n{ \"message\": \"...\", \"data\": {...} }\n```\n\n## Demo Flow\n1. Register/Login\n2. Upload CV (PDF) → wait for vectorStatus = COMPLETED\n3. Chat: \"CV của tôi hợp với job nào?\"\n4. Chat: \"So sánh CV của tôi với job React Developer\"\n5. Vector Search: GET /api/public/job-suggestions?keyword=&location=",
-		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-		"_exporter_id": "JobConnect-QA"
-	},
-	"item": [
-		{
-			"name": "🏆 Authentication",
-			"description": "Register, Login, Refresh Token, and Logout endpoints. Login automatically saves accessToken and refreshToken into environment variables via post-response script.",
-			"item": [
-				{
-					"name": "Register (Candidate)",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status 201 - Created', function () {",
-									"    pm.response.to.have.status(201);",
-									"});",
-									"",
-									"pm.test('Response time < 3000ms', function () {",
-									"    pm.expect(pm.response.responseTime).to.be.below(3000);",
-									"});",
-									"",
-									"pm.test('Response has valid structure', function () {",
-									"    const json = pm.response.json();",
-									"    pm.expect(json.status).to.eql('success');",
-									"    pm.expect(json.data).to.have.property('id');",
-									"    pm.expect(json.data).to.have.property('accessToken');",
-									"    pm.expect(json.data).to.have.property('refreshToken');",
-									"    pm.expect(json.data).to.have.property('role');",
-									"    pm.expect(json.data.role).to.eql('candidate');",
-									"});",
-									"",
-									"const json = pm.response.json();",
-									"if (json.data && json.data.accessToken) {",
-									"    pm.environment.set('accessToken', json.data.accessToken);",
-									"    pm.environment.set('refreshToken', json.data.refreshToken);",
-									"    console.log('[Register] Tokens saved to environment');",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"fullName\": \"Nguyễn Văn A\",\n  \"email\": \"candidate@gmail.com\",\n  \"phone\": \"0901234567\",\n  \"password\": \"123456\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/auth/register",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "auth", "register"]
-						}
-					}
-				},
-				{
-					"name": "Register (Recruiter)",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status 201 - Created', function () {",
-									"    pm.response.to.have.status(201);",
-									"});",
-									"",
-									"pm.test('Response time < 3000ms', function () {",
-									"    pm.expect(pm.response.responseTime).to.be.below(3000);",
-									"});",
-									"",
-									"pm.test('Response has recruiter fields', function () {",
-									"    const json = pm.response.json();",
-									"    pm.expect(json.status).to.eql('success');",
-									"    pm.expect(json.data.role).to.eql('recruiter');",
-									"    pm.expect(json.data).to.have.property('accessToken');",
-									"    pm.expect(json.data).to.have.property('refreshToken');",
-									"});",
-									"",
-									"const json = pm.response.json();",
-									"if (json.data && json.data.accessToken) {",
-									"    pm.environment.set('accessToken', json.data.accessToken);",
-									"    pm.environment.set('refreshToken', json.data.refreshToken);",
-									"    console.log('[Register Recruiter] Tokens saved');",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"fullName\": \"Admin Corp\",\n  \"email\": \"recruiter@gmail.com\",\n  \"phone\": \"0901234568\",\n  \"password\": \"123456\",\n  \"companyName\": \"ABC Corp\",\n  \"address\": \"Hồ Chí Minh\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/auth/register",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "auth", "register"]
-						}
-					}
-				},
-				{
-					"name": "Login",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status 200 - OK', function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test('Response time < 2000ms', function () {",
-									"    pm.expect(pm.response.responseTime).to.be.below(2000);",
-									"});",
-									"",
-									"pm.test('Login response has valid structure', function () {",
-									"    const json = pm.response.json();",
-									"    pm.expect(json.status).to.eql('success');",
-									"    pm.expect(json.data).to.have.property('id');",
-									"    pm.expect(json.data).to.have.property('email');",
-									"    pm.expect(json.data).to.have.property('fullName');",
-									"    pm.expect(json.data).to.have.property('role');",
-									"    pm.expect(json.data).to.have.property('accessToken');",
-									"    pm.expect(json.data).to.have.property('refreshToken');",
-									"    pm.expect(json.data.accessToken).to.match(/^eyJ/);",
-									"});",
-									"",
-									"const json = pm.response.json();",
-									"if (json.data && json.data.accessToken) {",
-									"    pm.environment.set('accessToken', json.data.accessToken);",
-									"    pm.environment.set('refreshToken', json.data.refreshToken);",
-									"    pm.environment.set('userId', json.data.id);",
-									"    console.log('[Login] accessToken saved: ' + json.data.accessToken.substring(0, 20) + '...');",
-									"    console.log('[Login] userId saved: ' + json.data.id);",
-									"} else {",
-									"    console.warn('[Login] WARNING: No accessToken in response. Auth-dependent requests will fail.');",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"email\": \"candidate@gmail.com\",\n  \"password\": \"123456\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/auth/login",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "auth", "login"]
-						}
-					}
-				},
-				{
-					"name": "Refresh Token",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status 200 - OK', function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test('Response has new accessToken', function () {",
-									"    const json = pm.response.json();",
-									"    pm.expect(json).to.have.property('accessToken');",
-									"    pm.expect(json.accessToken).to.match(/^eyJ/);",
-									"});",
-									"",
-									"const json = pm.response.json();",
-									"if (json.accessToken) {",
-									"    pm.environment.set('accessToken', json.accessToken);",
-									"    console.log('[Refresh] Token renewed');",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/auth/refresh-token",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "auth", "refresh-token"]
-						}
-					}
-				},
-				{
-					"name": "Logout",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status 200 - OK', function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test('Logout message', function () {",
-									"    const json = pm.response.json();",
-									"    pm.expect(json.message).to.eql('Đăng xuất thành công');",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/api/auth/logout",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "auth", "logout"]
-						}
-					}
-				}
-			]
-		},
-		{
-			"name": "👤 Candidate Profile",
-			"description": "View and update candidate profile information. All endpoints require CANDIDATE role.",
-			"item": [
-				{
-					"name": "Get My Profile",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status 200 - OK', function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test('Profile has required fields', function () {",
-									"    const json = pm.response.json();",
-									"    pm.expect(json.status).to.eql('success');",
-									"    pm.expect(json.data).to.have.property('fullName');",
-									"    pm.expect(json.data).to.have.property('role');",
-									"    pm.expect(json.data).to.have.property('phone');",
-									"    console.log('[Profile] Name: ' + json.data.fullName);",
-									"    console.log('[Profile] Headline: ' + (json.data.headline || 'N/A'));",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/api/candidate/profile",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "candidate", "profile"]
-						}
-					}
-				},
-				{
-					"name": "Update My Profile",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status 200 - OK', function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test('Profile updated successfully', function () {",
-									"    const json = pm.response.json();",
-									"    pm.expect(json.status).to.eql('success');",
-									"    pm.expect(json.message).to.eql('Cập nhật thông tin thành công');",
-									"    console.log('[Profile] Update response: ' + JSON.stringify(json.data));",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "PUT",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"fullName\": \"Nguyễn Văn A\",\n  \"headline\": \"Senior NodeJS Developer\",\n  \"summary\": \"Experienced full-stack developer with 5+ years in NodeJS and React\",\n  \"address\": \"123 Đường ABC\",\n  \"city\": \"Hồ Chí Minh\",\n  \"dateOfBirth\": \"2000-01-01\",\n  \"gender\": \"male\",\n  \"linkedinUrl\": \"https://linkedin.com/in/nguyenvanA\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/candidate/profile",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "candidate", "profile"]
-						}
-					}
-				}
-			]
-		},
-		{
-			"name": "📄 Resume Management",
-			"description": "Upload, list, set default, and delete CVs. Resume IDs are auto-saved for use in downstream requests.",
-			"item": [
-				{
-					"name": "Upload CV (PDF)",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status 201 - Upload accepted', function () {",
-									"    pm.response.to.have.status(201);",
-									"});",
-									"",
-									"pm.test('Upload response has valid structure', function () {",
-									"    const json = pm.response.json();",
-									"    pm.expect(json.status).to.eql('success');",
-									"    pm.expect(json).to.have.property('data');",
-									"    pm.expect(json.data).to.have.property('id');",
-									"    pm.expect(json.data).to.have.property('fileUrl');",
-									"    pm.expect(json.data).to.have.property('isDefault');",
-									"    pm.expect(json.data).to.have.property('createdAt');",
-									"});",
-									"",
-									"const json = pm.response.json();",
-									"if (json.data && json.data.id) {",
-									"    pm.environment.set('resumeId', json.data.id);",
-									"    console.log('[Upload CV] resumeId saved: ' + json.data.id);",
-									"    console.log('[Upload CV] vectorStatus is PENDING. Wait for background processing...');",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "formdata",
-							"formdata": [
-								{
-									"key": "cv",
-									"type": "file",
-									"src": "",
-									"description": "PDF file (max 5MB). After upload, the system asynchronously extracts text, chunks, and embeds it."
-								}
-							]
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/resumes/upload",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "resumes", "upload"]
-						}
-					}
-				},
-				{
-					"name": "List My CVs",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status 200 - OK', function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test('Response is an array of resumes', function () {",
-									"    const json = pm.response.json();",
-									"    pm.expect(json.status).to.eql('success');",
-									"    pm.expect(json.data).to.be.an('array');",
-									"    if (json.data.length > 0) {",
-									"        pm.expect(json.data[0]).to.have.property('id');",
-									"        pm.expect(json.data[0]).to.have.property('title');",
-									"        pm.expect(json.data[0]).to.have.property('fileUrl');",
-									"        pm.expect(json.data[0]).to.have.property('isDefault');",
-									"    }",
-									"});",
-									"",
-									"pm.test('Hint: Check vectorStatus in DB', function () {",
-									"    console.log('[List CVs] vectorStatus is NOT exposed in GET /api/resumes.');",
-									"    console.log('[List CVs] Check database directly or wait ~10s after upload.');",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/api/resumes",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "resumes"]
-						}
-					}
-				},
-				{
-					"name": "Set Default CV",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status 200 - OK', function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test('Default CV response', function () {",
-									"    const json = pm.response.json();",
-									"    pm.expect(json.status).to.eql('success');",
-									"    pm.expect(json.message).to.eql('Đặt CV mặc định thành công');",
-									"    pm.expect(json.data.isDefault).to.be.true;",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "PATCH",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/api/resumes/{{resumeId}}/default",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "resumes", "{{resumeId}}", "default"]
-						}
-					}
-				},
-				{
-					"name": "Delete CV",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status 200 - OK', function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test('Delete message', function () {",
-									"    const json = pm.response.json();",
-									"    pm.expect(json.status).to.eql('success');",
-									"    pm.expect(json.message).to.eql('Xóa CV thành công');",
-									"});",
-									"",
-									"pm.environment.unset('resumeId');",
-									"console.log('[Delete CV] resumeId cleared from environment');"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "DELETE",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/api/resumes/{{resumeId}}",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "resumes", "{{resumeId}}"]
-						}
-					}
-				}
-			]
-		},
-		{
-			"name": "🤖 RAG Chat (Core Feature)",
-			"description": "AI-powered job assistant using RAG pipeline: intent classification → vector search → Ollama Qwen2.5 response.\n\nAll chat endpoints return `messageResponse` format: `{ type, message, data? }`\n- On SUCCESS: `{ type: \"SUCCESS\", message: \"<AI answer>\" }`\n- On FAILED: `{ type: \"FAILED\", message: \"<error description>\" }`\n\nThe data field is only present for job-suggestions (list of jobs).",
-			"item": [
-				{
-					"name": "Chat - Group 1: Job Search",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status 200 - OK', function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test('Response time < 15000ms (AI generation)', function () {",
-									"    pm.expect(pm.response.responseTime).to.be.below(15000);",
-									"});",
-									"",
-									"pm.test('AI response uses messageResponse format', function () {",
-									"    const json = pm.response.json();",
-									"    pm.expect(json).to.have.property('type');",
-									"    pm.expect(json).to.have.property('message');",
-									"    pm.expect(json.type).to.eql('SUCCESS');",
-									"    pm.expect(json.message).to.not.be.null;",
-									"    pm.expect(json.message).to.not.be.empty;",
-									"    console.log('[Chat] AI reply: ' + json.message.substring(0, 200) + '...');",
-									"});",
-									"",
-									"if (pm.response.code === 500) {",
-									"    const errMsg = JSON.stringify(pm.response.json()).toLowerCase();",
-									"    if (errMsg.includes('input syntax') || errMsg.includes('vector'))",
-									"        console.error('[BUG] Vector syntax error in Group 1 query.');",
-									"    if (errMsg.includes('nan'))",
-									"        console.error('[BUG] NaN in similarity computation.');",
-									"    if (errMsg.includes('ollama') || errMsg.includes('econnrefused'))",
-									"        console.error('[INFRA] Ollama not running. Start: ollama run qwen2.5:3b');",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"question\": \"Tôi muốn tìm việc làm NodeJS ở Hồ Chí Minh\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/chat/chat",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "chat", "chat"]
-						}
-					}
-				},
-				{
-					"name": "Chat - Group 2: CV-Based Job Search",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status 200 - OK', function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test('Response time < 20000ms (AI + vector search)', function () {",
-									"    pm.expect(pm.response.responseTime).to.be.below(20000);",
-									"});",
-									"",
-									"pm.test('AI response uses messageResponse format', function () {",
-									"    const json = pm.response.json();",
-									"    pm.expect(json).to.have.property('type');",
-									"    pm.expect(json).to.have.property('message');",
-									"    console.log('[CV Search] Response: ' + (json.message || '').substring(0, 200) + '...');",
-									"});",
-									"",
-									"const json = pm.response.json();",
-									"if (json.message && json.message.includes('đang được xử lý')) {",
-									"    console.warn('[CV Search] CV vector still PENDING. Retry in 10-15s.');",
-									"    pm.test('Vector processing in progress - retry needed', function () {",
-									"        pm.expect(json.message).to.include('đang được xử lý');",
-									"    });",
-									"}",
-									"",
-									"if (pm.response.code === 500) {",
-									"    const errBody = JSON.stringify(pm.response.json()).toLowerCase();",
-									"    if (errBody.includes('input syntax') || errBody.includes('vector'))",
-									"        console.error('[BUG] Double-bracket vector syntax error (Group 2).');",
-									"    if (errBody.includes('nan'))",
-									"        console.error('[BUG] NaN in similarity computation.');",
-									"    if (errBody.includes('ollama') || errBody.includes('econnrefused'))",
-									"        console.error('[INFRA] Ollama not running.');",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"question\": \"CV của tôi hợp với job nào?\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/chat/chat",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "chat", "chat"]
-						}
-					}
-				},
-				{
-					"name": "Chat - Group 3: CV vs Job Comparison",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status 200 - OK', function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test('Response time < 20000ms (RAG pipeline)', function () {",
-									"    pm.expect(pm.response.responseTime).to.be.below(20000);",
-									"});",
-									"",
-									"pm.test('AI comparison uses messageResponse format', function () {",
-									"    const json = pm.response.json();",
-									"    pm.expect(json).to.have.property('type');",
-									"    pm.expect(json).to.have.property('message');",
-									"    pm.expect(json.type).to.be.oneOf(['SUCCESS', 'FAILED']);",
-									"    console.log('[CV_VS_JOB] Analysis: ' + (json.message || '').substring(0, 200));",
-									"});",
-									"",
-									"const json = pm.response.json();",
-									"if (json.message) {",
-									"    const hasSkillMatch = /kỹ năng|kinh nghiệm|phù hợp|mạnh|yếu/i.test(json.message);",
-									"    console.log('[CV_VS_JOB] Contains skill-match analysis: ' + hasSkillMatch);",
-									"}",
-									"",
-									"if (pm.response.code === 500) {",
-									"    const errBody = JSON.stringify(pm.response.json()).toLowerCase();",
-									"    if (errBody.includes('nan'))",
-									"        console.error('[BUG] NaN in cosine similarity (Group 3).');",
-									"    if (errBody.includes('vector') && errBody.includes('input'))",
-									"        console.error('[BUG] Vector input syntax error (Group 3).');",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"question\": \"So sánh CV của tôi với job React Developer, đánh giá mức độ phù hợp?\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/chat/chat",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "chat", "chat"]
-						}
-					}
-				},
-				{
-					"name": "Chat - Group 4: Company Info",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status 200 - OK', function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test('Response time < 15000ms (Ollama generation)', function () {",
-									"    pm.expect(pm.response.responseTime).to.be.below(15000);",
-									"});",
-									"",
-									"pm.test('Company info uses messageResponse format', function () {",
-									"    const json = pm.response.json();",
-									"    pm.expect(json).to.have.property('type');",
-									"    pm.expect(json).to.have.property('message');",
-									"    pm.expect(json.type).to.be.oneOf(['SUCCESS', 'FAILED']);",
-									"    console.log('[Company Info] ' + (json.message || '').substring(0, 150));",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"question\": \"Cho tôi biết thông tin về công ty FPT?\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/chat/chat",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "chat", "chat"]
-						}
-					}
-				},
-				{
-					"name": "Chat - Group 5: Greeting",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status 200 - OK', function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test('Response time < 10000ms (simple chat)', function () {",
-									"    pm.expect(pm.response.responseTime).to.be.below(10000);",
-									"});",
-									"",
-									"pm.test('Greeting uses messageResponse format', function () {",
-									"    const json = pm.response.json();",
-									"    pm.expect(json).to.have.property('type');",
-									"    pm.expect(json).to.have.property('message');",
-									"    pm.expect(json.message).to.not.be.empty;",
-									"    console.log('[Greeting] Bot says: ' + json.message);",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"question\": \"Xin chào, bạn có thể giúp gì cho tôi?\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/chat/chat",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "chat", "chat"]
-						}
-					}
-				},
-				{
-					"name": "Get Chat History",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status 200 - OK', function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test('Response has history array', function () {",
-									"    const json = pm.response.json();",
-									"    pm.expect(json).to.have.property('history');",
-									"    pm.expect(json.history).to.be.an('array');",
-									"    if (json.history.length > 0) {",
-									"        pm.expect(json.history[0]).to.have.property('question');",
-									"        pm.expect(json.history[0]).to.have.property('answer');",
-									"        console.log('[History] Last question: ' + json.history[0].question);",
-									"    }",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/api/chat-history/chat-history",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "chat-history", "chat-history"]
-						}
-					}
-				}
-			]
-		},
-		{
-			"name": "🔍 Search & Vector Suggestions",
-			"description": "Public job search, skill-based suggestions, vector-based AI search, bookmarks, and company details.",
-			"item": [
-				{
-					"name": "Search Jobs (Public)",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status 200 - OK', function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test('Search returns valid structure', function () {",
-									"    const json = pm.response.json();",
-									"    pm.expect(json.status).to.eql('success');",
-									"    pm.expect(json.data).to.have.property('jobs');",
-									"    pm.expect(json.data.jobs).to.be.an('array');",
-									"});",
-									"",
-									"const json = pm.response.json();",
-									"if (json.data && json.data.jobs && json.data.jobs.length > 0) {",
-									"    pm.environment.set('jobId', json.data.jobs[0].id);",
-									"    pm.environment.set('jobTitle', json.data.jobs[0].title);",
-									"    pm.environment.set('companyId', json.data.jobs[0].company?.id || '');",
-									"    console.log('[Search] First jobId saved: ' + json.data.jobs[0].id);",
-									"    console.log('[Search] Job title: ' + json.data.jobs[0].title);",
-									"    console.log('[Search] CompanyId: ' + (json.data.jobs[0].company?.id || 'N/A'));",
-									"} else {",
-									"    console.warn('[Search] No jobs found in search results.');",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "GET",
-						"url": {
-							"raw": "{{baseUrl}}/api/search-jobs/search-jobs?keyword=NodeJS&location=Hồ Chí Minh&page=1&limit=10",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "search-jobs", "search-jobs"],
-							"query": [
-								{
-									"key": "keyword",
-									"value": "NodeJS"
-								},
-								{
-									"key": "location",
-									"value": "Hồ Chí Minh"
-								},
-								{
-									"key": "page",
-									"value": "1"
-								},
-								{
-									"key": "limit",
-									"value": "10"
-								}
-							]
-						}
-					}
-				},
-				{
-					"name": "Get Job Detail (Public)",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status 200 - OK', function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test('Job detail has required fields', function () {",
-									"    const json = pm.response.json();",
-									"    pm.expect(json.status).to.eql('success');",
-									"    pm.expect(json.data).to.have.property('id');",
-									"    pm.expect(json.data).to.have.property('title');",
-									"    pm.expect(json.data).to.have.property('company');",
-									"    console.log('[Job Detail] Title: ' + json.data.title);",
-									"    console.log('[Job Detail] Company: ' + (json.data.company?.name || 'N/A'));",
-									"    if (json.data.company) pm.environment.set('companyId', json.data.company.id);",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "GET",
-						"url": {
-							"raw": "{{baseUrl}}/api/public/jobs/{{jobId}}",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "public", "jobs", "{{jobId}}"]
-						}
-					}
-				},
-				{
-					"name": "Get Company Detail (Public)",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status 200 - OK', function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test('Company detail has required fields', function () {",
-									"    const json = pm.response.json();",
-									"    pm.expect(json.status).to.eql('success');",
-									"    pm.expect(json.data).to.have.property('company');",
-									"    pm.expect(json.data).to.have.property('active_jobs');",
-									"    pm.expect(json.data.company).to.have.property('name');",
-									"    pm.expect(json.data.company).to.have.property('description');",
-									"    pm.expect(json.data.company).to.have.property('address');",
-									"    pm.expect(json.data.company).to.have.property('city');",
-									"    console.log('[Company] Name: ' + json.data.company.name);",
-									"    console.log('[Company] Active jobs: ' + (json.data.active_jobs?.length || 0));",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "GET",
-						"url": {
-							"raw": "{{baseUrl}}/api/public/companies/{{companyId}}",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "public", "companies", "{{companyId}}"]
-						}
-					}
-				},
-				{
-					"name": "Get Skill-Based Suggestions",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status 200 - OK', function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test('Suggestions return matchPercent', function () {",
-									"    const json = pm.response.json();",
-									"    pm.expect(json.status).to.eql('success');",
-									"    pm.expect(json.data).to.be.an('array');",
-									"    if (json.data.length > 0) {",
-									"        pm.expect(json.data[0]).to.have.property('matchPercent');",
-									"        pm.expect(json.data[0].matchPercent).to.be.a('number');",
-									"        pm.expect(json.data[0].matchPercent).to.be.within(0, 100);",
-									"        pm.expect(json.data[0]).to.have.property('matchCount');",
-									"        pm.expect(json.data[0]).to.have.property('matchedSkills');",
-									"        console.log('[Suggestions] Top match: ' + json.data[0].title);",
-									"        console.log('[Suggestions] Match: ' + json.data[0].matchPercent + '%');",
-									"        console.log('[Suggestions] Matched skills: ' + (json.data[0].matchedSkills || []).join(', '));",
-									"        if (!pm.environment.get('jobId')) {",
-									"            pm.environment.set('jobId', json.data[0].id);",
-									"            console.log('[Suggestions] jobId auto-saved from suggestions');",
-									"        }",
-									"    }",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/api/suggestions?limit=5",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "suggestions"],
-							"query": [
-								{
-									"key": "limit",
-									"value": "5"
-								}
-							]
-						}
-					}
-				},
-				{
-					"name": "Vector Job Search (AI) - Public",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status 200 - OK', function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test('Response time < 20000ms (AI + vector search)', function () {",
-									"    pm.expect(pm.response.responseTime).to.be.below(20000);",
-									"});",
-									"",
-									"pm.test('Vector search returns suggestions wrapper', function () {",
-									"    const json = pm.response.json();",
-									"    pm.expect(json).to.have.property('suggestions');",
-									"    pm.expect(json.suggestions).to.have.property('type');",
-									"    pm.expect(json.suggestions).to.have.property('message');",
-									"    if (json.suggestions.type === 'SUCCESS') {",
-									"        pm.expect(json.suggestions.data).to.have.property('jobs');",
-									"        pm.expect(json.suggestions.data.jobs).to.be.an('array');",
-									"        console.log('[Vector Search] Found ' + json.suggestions.data.jobs.length + ' jobs');",
-									"    } else {",
-									"        console.log('[Vector Search] No results: ' + json.suggestions.message);",
-									"    }",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "GET",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/api/public/job-suggestions?keyword=NodeJS&location=Hồ Chí Minh&jobType=Full-time&jobLevel=Junior",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "public", "job-suggestions"],
-							"query": [
-								{
-									"key": "keyword",
-									"value": "NodeJS"
-								},
-								{
-									"key": "location",
-									"value": "Hồ Chí Minh"
-								},
-								{
-									"key": "jobType",
-									"value": "Full-time"
-								},
-								{
-									"key": "jobLevel",
-									"value": "Junior"
-								},
-								{
-									"key": "salary",
-									"value": ""
-								}
-							]
-						}
-					}
-				},
-				{
-					"name": "Toggle Bookmark Job",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Status 200 - OK', function () {",
-									"    pm.response.to.have.status(200);",
-									"});",
-									"",
-									"pm.test('Bookmark toggle response', function () {",
-									"    const json = pm.response.json();",
-									"    pm.expect(json).to.have.property('bookmarked');",
-									"    pm.expect(json).to.have.property('message');",
-									"    console.log('[Bookmark] Status: ' + (json.bookmarked ? 'Saved' : 'Unsaved'));",
-									"    console.log('[Bookmark] Message: ' + json.message);",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [],
-						"url": {
-							"raw": "{{baseUrl}}/api/bookmarks/{{jobId}}",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "bookmarks", "{{jobId}}"]
-						}
-					}
-				}
-			]
-		},
-		{
-			"name": "⚡ Demo Flow (Sequential)",
-			"description": "Complete end-to-end demo: Login → Upload CV → Wait for Vectorization → Chat (CV Search + CV vs Job) → Verify. Run these in order with status polling between CV upload and chat.",
-			"item": [
-				{
-					"name": "Step 1: Login as Candidate",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Login OK', () => {",
-									"    pm.response.to.have.status(200);",
-									"    const j = pm.response.json();",
-									"    pm.environment.set('accessToken', j.data.accessToken);",
-									"    pm.environment.set('userId', j.data.id);",
-									"    console.log('✓ Logged in. User ID: ' + j.data.id);",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"email\": \"candidate@gmail.com\",\n  \"password\": \"123456\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/auth/login",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "auth", "login"]
-						}
-					}
-				},
-				{
-					"name": "Step 2: Upload CV (PDF)",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Upload OK', () => {",
-									"    pm.response.to.have.status(201);",
-									"    const j = pm.response.json();",
-									"    pm.environment.set('resumeId', j.data.id);",
-									"    console.log('✓ CV uploaded. Resume ID: ' + j.data.id);",
-									"    console.log('⏳ Background vectorization started. Wait ~10-15 seconds...');",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "formdata",
-							"formdata": [
-								{
-									"key": "cv",
-									"type": "file",
-									"src": ""
-								}
-							]
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/resumes/upload",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "resumes", "upload"]
-						}
-					}
-				},
-				{
-					"name": "Step 3: Chat - CV-Based Job Match",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('Chat response OK - messageResponse format', () => {",
-									"    pm.response.to.have.status(200);",
-									"    const j = pm.response.json();",
-									"    pm.expect(j).to.have.property('type');",
-									"    pm.expect(j).to.have.property('message');",
-									"    pm.expect(j.message).to.not.be.null;",
-									"    pm.expect(j.message).to.not.be.empty;",
-									"    console.log('✓ AI Response (' + j.message.length + ' chars)');",
-									"    console.log('---');",
-									"    console.log(j.message.substring(0, 500));",
-									"    console.log('---');",
-									"    ",
-									"    if (j.message.includes('đang được xử lý')) {",
-									"        console.warn('⚠ Vector still PENDING. Re-run after 15s.');",
-									"    }",
-									"});",
-									"",
-									"if (pm.response.code === 500) {",
-									"    const err = JSON.stringify(pm.response.json()).toLowerCase();",
-									"    if (err.includes('input syntax') || err.includes('vector'))",
-									"        console.error('[BUG] Double-bracket vector error.');",
-									"    if (err.includes('nan'))",
-									"        console.error('[BUG] NaN in similarity.');",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"question\": \"CV của tôi hợp với job nào?\"\n}"
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/chat/chat",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "chat", "chat"]
-						}
-					}
-				},
-				{
-					"name": "Step 4: Chat - CV vs Specific Job",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"pm.test('CV_VS_JOB comparison OK - messageResponse format', () => {",
-									"    pm.response.to.have.status(200);",
-									"    const j = pm.response.json();",
-									"    pm.expect(j).to.have.property('type');",
-									"    pm.expect(j).to.have.property('message');",
-									"    pm.expect(j.message).to.not.be.null;",
-									"    console.log('✓ Comparison analysis (' + j.message.length + ' chars)');",
-									"    console.log('---');",
-									"    console.log(j.message.substring(0, 500));",
-									"    console.log('---');",
-									"});"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"question\": \"So sánh CV của tôi với job NodeJS Developer, đánh giá mức độ phù hợp và đề xuất kỹ năng cần cải thiện?\"\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{baseUrl}}/api/chat/chat",
-							"host": ["{{baseUrl}}"],
-							"path": ["api", "chat", "chat"]
-						}
-					}
-				}
-			]
-		}
-	],
-	"auth": {
-		"type": "bearer",
-		"bearer": [
-			{
-				"key": "token",
-				"value": "{{accessToken}}",
-				"type": "string"
-			}
-		]
-	},
-	"event": [
-		{
-			"listen": "prerequest",
-			"script": {
-				"exec": [
-					"const required = ['baseUrl', 'accessToken'];",
-					"const missing = required.filter(k => !pm.environment.get(k));",
-					"if (missing.length > 0) {",
-					"    console.warn('[Pre-Req] Missing env vars: ' + missing.join(', '));",
-					"    console.warn('[Pre-Req] Run Login first to populate tokens.');",
-					"}"
-				],
-				"type": "text/javascript"
-			}
-		},
-		{
-			"listen": "test",
-			"script": {
-				"exec": [
-					"if (pm.response.code >= 500) {",
-					"    const reqInfo = pm.request.method + ' ' + pm.request.url;",
-					"    const resBody = pm.response.text().substring(0, 300);",
-					"    console.error('[Global 500] ' + reqInfo);",
-					"    console.error('[Global 500] Body: ' + resBody);",
-					"}"
-				],
-				"type": "text/javascript"
-			}
-		}
-	],
-	"variable": [
-		{
-			"key": "baseUrl",
-			"value": "http://localhost:3000",
-			"type": "string"
-		}
-	]
+  "info": {
+    "name": "JobConnect API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\",\n  \"role\": \"CANDIDATE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set(\"accessToken\", jsonData.data.accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"your_refresh_token_here\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/refresh-token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "refresh-token"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "logout"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Admin Only",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/admin-only",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "admin-only"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Smart",
+      "item": [
+        {
+          "name": "Smart Scoring CV",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n \"jobId\": \"your_job_id\",\n \"cvId\": \"your_cv_id\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/smart/scoring-cv",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "smart",
+                "scoring-cv"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Chat",
+      "item": [
+        {
+          "name": "Chat",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Hello\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/chat",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "chat",
+                "chat"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Chat History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/chat/chat-history",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "chat",
+                "chat-history"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Companies",
+          "item": [
+            {
+              "name": "Get Pending Companies",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/admin/companies/pending",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "admin",
+                    "companies",
+                    "pending"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get All Companies",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/admin/companies",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "admin",
+                    "companies"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Review Company",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"action\": \"approved\",\n  \"reason\": \"\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/admin/companies/:id/review",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "admin",
+                    "companies",
+                    ":id",
+                    "review"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "company_id"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Jobs",
+          "item": [
+            {
+              "name": "Get All Jobs",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/admin/jobs",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "admin",
+                    "jobs"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Pending Jobs",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/admin/jobs/pending",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "admin",
+                    "jobs",
+                    "pending"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Job Detail",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/admin/jobs/:id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "admin",
+                    "jobs",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "job_id"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Review Job",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"action\": \"approved\",\n  \"reason\": \"\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/admin/jobs/:id/review",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "admin",
+                    "jobs",
+                    ":id",
+                    "review"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "job_id"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Job",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/admin/jobs/:id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "admin",
+                    "jobs",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "job_id"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Reports",
+          "item": [
+            {
+              "name": "Get System Stats",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/admin/reports/overview",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "admin",
+                    "reports",
+                    "overview"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get User Growth",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/admin/reports/users/growth",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "admin",
+                    "reports",
+                    "users",
+                    "growth"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Applications By Month",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/admin/reports/applications/monthly",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "admin",
+                    "reports",
+                    "applications",
+                    "monthly"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Jobs By Type",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/admin/reports/jobs/by-type",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "admin",
+                    "reports",
+                    "jobs",
+                    "by-type"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Jobs By Level",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/admin/reports/jobs/by-level",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "admin",
+                    "reports",
+                    "jobs",
+                    "by-level"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Users",
+          "item": [
+            {
+              "name": "Get All Users",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/admin/users",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "admin",
+                    "users"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Toggle Lock User",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/admin/users/:id/toggle-lock",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "admin",
+                    "users",
+                    ":id",
+                    "toggle-lock"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "user_id"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete User",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/admin/users/:id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "admin",
+                    "users",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "user_id"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Employer",
+      "item": [
+        {
+          "name": "Get My Company",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/employer/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "employer",
+                "profile"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Company",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"companyName\": \"New Company Name\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/employer/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "employer",
+                "profile"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Logo",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "logo",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/employer/logo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "employer",
+                "logo"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Logo",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/employer/logo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "employer",
+                "logo"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Applicants",
+          "item": [
+            {
+              "name": "Get All Applicants",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/employer/applicants",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "employer",
+                    "applicants"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Application Detail",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/employer/applicants/:applicationId",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "employer",
+                    "applicants",
+                    ":applicationId"
+                  ],
+                  "variable": [
+                    {
+                      "key": "applicationId",
+                      "value": "application_id"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get CV File",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/employer/applicants/:applicationId/cv",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "employer",
+                    "applicants",
+                    ":applicationId",
+                    "cv"
+                  ],
+                  "variable": [
+                    {
+                      "key": "applicationId",
+                      "value": "application_id"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update Application Status",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"under_review\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/employer/applicants/:applicationId/status",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "employer",
+                    "applicants",
+                    ":applicationId",
+                    "status"
+                  ],
+                  "variable": [
+                    {
+                      "key": "applicationId",
+                      "value": "application_id"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Application",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/employer/applicants/:applicationId",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "employer",
+                    "applicants",
+                    ":applicationId"
+                  ],
+                  "variable": [
+                    {
+                      "key": "applicationId",
+                      "value": "application_id"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Job Management",
+          "item": [
+            {
+              "name": "Create Job",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"Software Engineer\",\n  \"description\": \"Job description here\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/employer/jobs",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "employer",
+                    "jobs"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get My Jobs",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/employer/jobs",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "employer",
+                    "jobs"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Job Detail",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/employer/jobs/:id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "employer",
+                    "jobs",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "job_id"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update Job",
+              "request": {
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"Senior Software Engineer\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/employer/jobs/:id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "employer",
+                    "jobs",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "job_id"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Toggle Pause Job",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/employer/jobs/:id/toggle-pause",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "employer",
+                    "jobs",
+                    ":id",
+                    "toggle-pause"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "job_id"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Job",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/employer/jobs/:id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "employer",
+                    "jobs",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "job_id"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Dashboard",
+          "item": [
+            {
+              "name": "Get Dashboard",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/employer/dashboard",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "employer",
+                    "dashboard"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Candidate",
+      "item": [
+        {
+          "name": "Get My Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/candidate/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "candidate",
+                "profile"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"New Full Name\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/candidate/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "candidate",
+                "profile"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Avatar",
+          "item": [
+            {
+              "name": "Update Avatar",
+              "request": {
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "avatar",
+                      "type": "file",
+                      "src": []
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/avatar",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "avatar"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Avatar",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/avatar",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "avatar"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Portfolio",
+          "item": [
+            {
+              "name": "Get Experiences",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/portfolio/experiences",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "portfolio",
+                    "experiences"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Experience",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"company\": \"Some Company\",\n  \"title\": \"Developer\",\n  \"startDate\": \"2022-01-01\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/portfolio/experiences",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "portfolio",
+                    "experiences"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Educations",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/portfolio/educations",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "portfolio",
+                    "educations"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create Education",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"school\": \"Some University\",\n  \"degree\": \"Bachelor's\",\n  \"startDate\": \"2018-01-01\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/portfolio/educations",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "portfolio",
+                    "educations"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Skills",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/portfolio/skills",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "portfolio",
+                    "skills"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update Skills",
+              "request": {
+                "method": "PUT",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"skills\": [\"JavaScript\", \"Node.js\"]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/portfolio/skills",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "portfolio",
+                    "skills"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Resumes",
+          "item": [
+            {
+              "name": "Upload Resume",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "cv",
+                      "type": "file",
+                      "src": []
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/resumes/upload",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "resumes",
+                    "upload"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Resumes",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/resumes",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "resumes"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Set Default Resume",
+              "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/resumes/:id/default",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "resumes",
+                    ":id",
+                    "default"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "resume_id"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Delete Resume",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/resumes/:id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "resumes",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "resume_id"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Applications",
+          "item": [
+            {
+              "name": "Apply Job",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"jobId\": \"job_id\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/api/applications",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "applications"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get My Applications",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/applications",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "applications"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Application Detail",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/applications/:id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "applications",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "application_id"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Withdraw Application",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/applications/:id",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "applications",
+                    ":id"
+                  ],
+                  "variable": [
+                    {
+                      "key": "id",
+                      "value": "application_id"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Bookmarks",
+          "item": [
+            {
+              "name": "Get Bookmarks",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/bookmarks",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "bookmarks"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Toggle Bookmark",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/bookmarks/:jobId",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "bookmarks",
+                    ":jobId"
+                  ],
+                  "variable": [
+                    {
+                      "key": "jobId",
+                      "value": "job_id"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Job Suggestions",
+          "item": [
+            {
+              "name": "Get Job Suggestions",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/suggestions",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "suggestions"
+                  ]
+                }
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Public",
+      "item": [
+        {
+          "name": "Get Job Detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/public/jobs/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "public",
+                "jobs",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "job_id"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Company Detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/public/companies/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "public",
+                "companies",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "company_id"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Job Suggestions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/public/job-suggestions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "public",
+                "job-suggestions"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Search",
+      "item": [
+        {
+          "name": "Search Jobs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/search-jobs/search-jobs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "search-jobs",
+                "search-jobs"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    }
+  ]
 }

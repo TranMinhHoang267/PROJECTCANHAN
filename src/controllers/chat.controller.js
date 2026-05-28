@@ -10,7 +10,10 @@ const prisma = require("../config/prisma");
 exports.chat = async (req, res) => {
   const userId = req.user.id;
   const { question } = req.body;
-  //console.log("Received question:", question);
+  if (!question) {
+    return res.status(500).json({ message: "Server error, missing field" });
+  }
+  console.log("Received question:", question);
   const ans = await chat.chat(question, userId);
   console.log("Answer:", ans);
 
@@ -55,6 +58,10 @@ exports.getJobSuggestions = async (req, res) => {
   const jobType = req.query.jobType || "";
   const jobLevel = req.query.jobLevel || "";
   const salary = req.query.salary || "";
+
+  if (!userId || !keyword || keyword === "") {
+    return res.status(400).json({ message: "Server error, missing field" });
+  }
 
   const suggestions = await chat.getJobSuggestions(userId, {
     keyword,
