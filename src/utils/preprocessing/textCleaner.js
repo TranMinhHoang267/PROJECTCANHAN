@@ -3,7 +3,8 @@
  * @param {String} text
  */
 const clean = (text) => {
-  if (!text) return "";
+  if (!text) return text;
+  if (typeof text !== "string") return text;
 
   return noiseRemoval(removeEmojis(text));
 };
@@ -49,7 +50,7 @@ const removeEmojis = (text) => {
 
 /**
  *
- * @param {*} job
+ * @param {import('@prisma/client').Job} job
  * @returns {Array<String>}
  */
 const cleaningJob = (job) => {
@@ -58,6 +59,10 @@ const cleaningJob = (job) => {
   let desc = clean(job.description);
   const req = clean(job.requirements);
   const benefits = clean(job.benefits);
+  const salary =
+    job.salaryMin && job.salaryMax
+      ? `${clean(job.salaryMin)} - ${clean(job.salaryMax)}`
+      : job.salaryMin;
 
   // If more than 30% of the text was removed, it might be too noisy, so we can choose to return an empty string or the original text}
   // Description is crucial for understanding the job, if it's too noisy, we skip embedding this job
@@ -70,12 +75,15 @@ const cleaningJob = (job) => {
    * We also ensure that any extra whitespace is reduced to a single space to keep the text clean and consistent.
    * So AI can understand the context of the job posting and generate a meaningful vector representation for it.
    */
-  const jobTitleContext = `Job Title: ${title}`;
+  const jobTitleContext = title;
   const cleanedArray = [
-    `${jobTitleContext} Company Location: ${clean(job.location)}. Job Type: ${clean(job.jobType)}. Job Level: ${clean(job.jobLevel)}.`,
-    `${jobTitleContext} Description: ${desc}`,
-    `${jobTitleContext} Requirements: ${req}`,
-    `${jobTitleContext} Benefits: ${benefits}`,
+    `Vị trí ${jobTitleContext} làm việc tại địa điểm: ${clean(job.location)}.`,
+    `Vị trí ${jobTitleContext} có hình thức làm việc là: ${clean(job.jobType)}.`,
+    `Vị trí ${jobTitleContext} yêu cầu cấp bậc: ${clean(job.jobLevel)}.`,
+    `Mô tả công việc của vị trí ${jobTitleContext}: ${desc}`,
+    `Yêu cầu tuyển dụng của vị trí ${jobTitleContext}: ${req}`,
+    `Quyền lợi và phúc lợi của vị trí ${jobTitleContext}: ${benefits}`,
+    `Mức lương của vị trí ${jobTitleContext}: ${salary}`,
   ];
   return cleanedArray;
 };

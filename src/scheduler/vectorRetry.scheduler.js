@@ -35,6 +35,13 @@ const setupVectorSchedule = () => {
           where: {
             OR: [{ vectorStatus: "PENDING" }, { vectorStatus: "FAILED" }],
           },
+          include: {
+            company: {
+              select: {
+                userId: true,
+              },
+            },
+          },
           take: 5,
         });
 
@@ -43,8 +50,9 @@ const setupVectorSchedule = () => {
         );
 
         for (const job of incompleteJobs) {
+          console.log(job);
           // Re-processing (Do not use await to avoid loop bottleneck if a job fails)
-          processAndStoreJobVector(job)
+          processAndStoreJobVector(job, job.company.userId)
             .then(() =>
               console.log(`[SCHEDULE] Re-processed Job ID: ${job.id}`),
             )
@@ -80,19 +88,19 @@ const setupVectorSchedule = () => {
         });
 
         console.log(
-          `[SCHEDULE] Found ${incompleteResumes.length} Job that needs reprocessing.`,
+          `[SCHEDULE] Found ${incompleteResumes.length} Resume that needs reprocessing.`,
         );
 
-        for (const job of incompleteResumes) {
+        for (const resume of incompleteResumes) {
           // Re-processing (Do not use await to avoid loop bottleneck if a job fails)
-          processAndStoreResumeVector(job, job.userId)
+          processAndStoreResumeVector(resume, resume.userId)
             .then(() =>
-              console.log(`[SCHEDULE] Re-processed Job ID: ${job.id}`),
+              console.log(`[SCHEDULE] Re-processed Resume ID: ${resume.id}`),
             )
 
             .catch((err) =>
               console.error(
-                `[SCHEDULE] Error re-processing Job ${job.id}:`,
+                `[SCHEDULE] Error re-processing Resume ${resume.id}:`,
                 err,
               ),
             );
