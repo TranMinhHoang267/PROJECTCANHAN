@@ -18,6 +18,13 @@ const MIN_SIMILARITY_SCORE = parseFloat(
  * @param {*} userId
  */
 const _handleComparison = async (refined_question, entities, type, userId) => {
+  if (!entities || !Array.isArray(entities) || entities.length === 0) {
+    return messageResponse(
+      TYPE.failed,
+      "Không tìm thấy đối tượng cụ thể để so sánh. Vui lòng cung cấp tên công ty hoặc công việc cụ thể.",
+    );
+  }
+
   if (type === "COMPANY") {
     const companyNames = entities[2]
       ? entities[2]
@@ -25,9 +32,12 @@ const _handleComparison = async (refined_question, entities, type, userId) => {
           .map((name) => name.trim())
           .filter(Boolean)
       : [];
+    
+    const searchTerms = companyNames.length > 0 ? companyNames : entities;
+
     const results = await prisma.company.findMany({
       where: {
-        OR: companyNames.map((name) => ({
+        OR: searchTerms.map((name) => ({
           name: { contains: name, mode: "insensitive" },
         })),
       },
@@ -76,10 +86,10 @@ const _handleComparison = async (refined_question, entities, type, userId) => {
         title: true,
         description: true,
         benefits: true,
-        salary_min: true,
-        salary_max: true,
+        salaryMin: true,
+        salaryMax: true,
         location: true,
-        job_type: true,
+        jobType: true,
         jobLevel: true,
         skills: {
           select: {
@@ -97,13 +107,13 @@ const _handleComparison = async (refined_question, entities, type, userId) => {
       "Công việc số:": index + 1,
       id: job.id,
       "Vị trí": job.title,
-      "Công ty": job.company.name,
-      "Mức lương": `${job.salary_min} - ${job.salary_max} USD`,
+      "Công ty": job.company?.name || "Không rõ",
+      "Mức lương": `${job.salaryMin} - ${job.salaryMax} USD`,
       "Địa điểm": `${job.location}`,
       "Mô tả": job.description,
-      "Loại việc làm": job.job_type,
+      "Loại việc làm": job.jobType,
       "Trình độ": job.jobLevel,
-      "Kỹ năng": job.skills.map((skill) => skill),
+      "Kỹ năng": job.skills.map((s) => s.skill.name),
     }));
     const prompt = `Danh sách công việc (Dưới dạng JSON):\n${JSON.stringify(cleanResults, null, 2)}\n\nCâu hỏi của người dùng:\n${refined_question}\n\n`;
     const response = await geminiGeneration(prompt, 0);
@@ -122,56 +132,53 @@ const _handleComparison = async (refined_question, entities, type, userId) => {
       );
     }
 
-    const listJob = entities[1].split(",");
-    const listCompany = entities[2].split(",");
+    const titleKeywords = entities[1] ? entities[1].trim() : "";
+    const companyKeywords = entities[2] ? entities[2].trim() : "";
 
-    const jobKey = listJob.map((value) => {
-      return value.trim().split(/\s+/).join(".+");
+    const job = await prisma.job.findFirst({
+      where: {
+        status: "approved",
+        deadline: { gte: new Date() },
+        title: titleKeywords ? { contains: titleKeywords, mode: "insensitive" } : undefined,
+        company: companyKeywords ? { name: { contains: companyKeywords, mode: "insensitive" } } : undefined,
+      },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        salaryMin: true,
+        salaryMax: true,
+        location: true,
+        jobType: true,
+        company: {
+          select: {
+            name: true,
+          },
+        },
+        skills: {
+          select: {
+            skill: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
     });
 
-    const companyKey = listCompany.map((value) => {
-      return value.trim().split(/\s+/).join(".+");
-    });
-
-    console.log("Title keywords regex:", jobKey);
-    console.log("Company keywords regex:", companyKey);
-    const job = await prisma.$queryRaw`
-      SELECT 
-          j.id, 
-          j.title, 
-          j.description, 
-          j.salary_min as "salaryMin", 
-          j.salary_max as "salaryMax", 
-          j.location, 
-          j.job_type as "jobType",
-          s.name as "skills"
-      FROM "jobs" j
-      JOIN "companies" c ON j.company_id = c.id 
-      LEFT JOIN "job_skills" js ON j.id = js.job_id
-      LEFT JOIN "skills" s ON js.skill_id = s.id
-      WHERE 
-          j.title ~* ANY(${jobKey})
-          AND c.name ~* ANY(${companyKey})
-          
-          AND j.status = 'approved'
-          AND j.deadline >= NOW()
-`;
-
-    console.log("Job found for CV comparison:", job);
-    if (!job)
+    if (!job) {
       return messageResponse(
         TYPE.failed,
         "Không tìm thấy thông tin công việc cụ thể để đánh giá. Vui lòng cung cấp nhiều thông tin hơn.",
       );
+    }
 
-    // 3. SO SÁNH VECTOR: Lấy các đoạn CV liên quan nhất đến Job này (Sửa lỗi H3)
-    // Giả sử bạn đã có vector của Job (đã lưu lúc tạo Job hoặc tạo mới tại đây)
     const jobVectors = await prisma.$queryRaw`
       SELECT embedding::text FROM "job_vectors" 
-      WHERE job_id = ${job[0].id}
-  `;
+      WHERE job_id = ${job.id}::uuid
+    `;
 
-    // @ts-ignore
     if (!jobVectors || jobVectors.length === 0) {
       return messageResponse(
         TYPE.failed,
@@ -183,7 +190,7 @@ const _handleComparison = async (refined_question, entities, type, userId) => {
       const chunks = await prisma.$queryRaw`
         SELECT content, 1 - (embedding <=> ${jv.embedding}::vector) AS similarity
         FROM "resume_vectors"
-        WHERE resume_id = ${resume.id}
+        WHERE resume_id = ${resume.id}::uuid
         ORDER BY similarity DESC
         LIMIT 1
       `;
@@ -192,22 +199,20 @@ const _handleComparison = async (refined_question, entities, type, userId) => {
       }
     }
 
-    // 3. Gộp các đoạn CV tìm được để gửi cho AI đánh giá
     const context = Array.from(new Set(relevantChunks)).join("\n---\n");
 
     const cleanResults = {
-      "Vị trí": job[0].title,
-      "Công ty": job[0].companyName,
-      "Yêu cầu & Mô tả": job[0].description,
-      "Kỹ năng yêu cầu": job[0].skills,
+      "Vị trí": job.title,
+      "Công ty": job.company?.name || "Không rõ",
+      "Yêu cầu & Mô tả": job.description,
+      "Kỹ năng yêu cầu": job.skills.map((s) => s.skill.name).join(", "),
     };
 
-    // 4. Tạo Prompt an toàn về Token
     const prompt = `
     YÊU CẦU CÔNG VIỆC:\n\n
     ${JSON.stringify(cleanResults, null, 2)}\n\n
     CÁC PHẦN LIÊN QUAN TRONG CV NGƯỜI DÙNG:\n\n
-  ${context}\n\n
+    ${context}\n\n
     CÂU HỎI: ${refined_question}\n\n
     Hãy trả lời ngắn gọn, tập trung vào sự khớp nhau về kỹ năng và kinh nghiệm.`;
 

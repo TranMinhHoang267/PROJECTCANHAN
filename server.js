@@ -26,7 +26,7 @@ app.use(express.json());
 
 // Serve file tĩnh (avatar, CV PDF...)
 // src/uploads là nơi multer thực sự lưu file (khớp với volume mount trong Docker)
-app.use("/uploads", express.static(path.join(process.cwd(), "src", "uploads")));
+app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 // CRUD-methods , create-post, read-get, update-put, delete-delete
 // route mặc đinh
 // Import routes
@@ -65,14 +65,14 @@ app.use("/api/bookmarks", bookmarkRoutes);
 app.use("/api/suggestions", jobSuggestionRoutes);
 app.use("/api/search-jobs", searchJobRoutes);
 app.use("/api/public", publicRoutes);
-app.use("/api/smart", smartRoutes);
-
+app.use("/api/chat", chat);
+app.use("/api/chat-history", chat);
 // --- Employer ---
 app.use("/api/employer", employerRoutes);
 app.use("/api/employer/jobs", jobManagementRoutes);
 app.use("/api/employer/applicants", applicantRoutes);
 app.use("/api/employer/dashboard", dashboardRoutes);
-app.use("/api/chat", chat);
+app.use("/api/smart", smartRoutes);
 
 // --- Admin ---
 app.use("/api/admin/companies", adminCompanyRoutes);

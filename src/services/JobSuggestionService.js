@@ -16,7 +16,8 @@ exports.getJobSuggestions = async (userId, filters = {}) => {
 
     // 2. Lấy tất cả job đã apply (kể cả đã xóa/rút) để loại trừ
     const appliedApplications = await prisma.application.findMany({
-        where: { userId },
+        
+        where: { userId, isDeleted: false }, 
         select: { jobId: true }
     });
 

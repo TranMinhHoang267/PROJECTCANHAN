@@ -28,7 +28,10 @@ const textEmbedding = async (text) => {
       const output = await client.featureExtraction({
         model: "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
         inputs: text,
-      });
+        options: {
+            provider: "hf-inference" 
+        }
+      }); 
       return output;
     } catch (error) {
       // @ts-ignore

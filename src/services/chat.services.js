@@ -216,3 +216,6 @@ exports.getJobSuggestions = async (userId, filters) => {
     return messageResponse(TYPE.failed, refined_question.message);
   }
 };
+
+
+

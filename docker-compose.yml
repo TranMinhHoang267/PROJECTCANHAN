@@ -22,16 +22,18 @@ services:
       - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
       - JWT_REFRESH_EXPIRES_IN=${JWT_REFRESH_EXPIRES_IN:-7d}
       - BCRYPT_ROUNDS=${BCRYPT_ROUNDS:-10}
+      - GG_API_KEY=${GG_API_KEY}
+      - HF_TOKEN=${HF_TOKEN}
+      - HF_MODEL_ENDPOINT=${HF_MODEL_ENDPOINT}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       - .:/app
       # Quan trọng: Giữ node_modules của container không bị máy host đè lên
       - /app/node_modules
-      - ./src/uploads:/app/src/uploads
+      - ./uploads:/app/uploads
     security_opt:
       - no-new-privileges:true
-
 networks:
   default:
     name: canhan_backend_network

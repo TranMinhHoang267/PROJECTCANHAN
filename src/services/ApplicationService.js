@@ -18,10 +18,8 @@ exports.applyJob = async (userId, data) => {
 
   await _getActiveJob(jobId);
 
-  const existed = await prisma.application.findFirst({
-    where: { userId, jobId },
-  });
-  if (existed) throw new Error("Bạn đã nộp đơn ứng tuyển vị trí này rồi.");
+    const existed = await prisma.application.findFirst({ where: { userId, jobId, isDeleted: false } });
+    if (existed) throw new Error('Bạn đã nộp đơn ứng tuyển vị trí này rồi.');
 
   // check resume exist or not
   const resume = await prisma.resume.findFirst({
@@ -35,19 +33,43 @@ exports.applyJob = async (userId, data) => {
   const job = await prisma.job.findUnique({ where: { id: jobId } });
   const user = await prisma.user.findUnique({ where: { id: userId } });
 
-  const application = await prisma.application.create({
-    data: {
-      userId,
-      jobId,
-      companyId: job?.companyId || null,
-      fullName: user?.fullName || "",
-      email: user?.email || "",
-      phone: user?.phone || "",
-      resumeId: resume.id,
-      coverLetter: coverLetter?.trim() || null,
-      status: "submitted",
-    },
-  });
+    // Kiểm tra xem đã có đơn ứng tuyển bị xóa mềm (rút) trước đó chưa
+    const deletedApp = await prisma.application.findFirst({
+        where: { userId, jobId, isDeleted: true }
+    });
+
+    if (deletedApp) {
+        // Cập nhật lại bản ghi cũ thay vì tạo mới
+        const application = await prisma.application.update({
+            where: { id: deletedApp.id },
+            data: {
+                companyId:   job?.companyId   || null,
+                fullName:    user?.fullName    || '',
+                email:       user?.email       || '',
+                phone:       user?.phone       || '',
+                resumeId:   resumeId,
+                coverLetter: coverLetter?.trim() || null,
+                status:      'submitted',
+                isDeleted:   false,
+                createdAt:   new Date() // Cập nhật lại thời gian nộp đơn mới
+            }
+        });
+        return application;
+    }
+
+    const application = await prisma.application.create({
+        data: {
+            userId,
+            jobId,
+            companyId:   job?.companyId   || null,
+            fullName:    user?.fullName    || '',
+            email:       user?.email       || '',
+            phone:       user?.phone       || '',
+            resumeId:    resume.id,
+            coverLetter: coverLetter?.trim() || null,
+            status:      'submitted'
+        }
+    });
 
   return application;
 };
@@ -76,8 +98,6 @@ exports.getMyApplications = async (userId, filters = {}) => {
           },
         },
         createdAt: true,
-      },
-      include: {
         job: {
           select: {
             id: true,
@@ -139,9 +159,8 @@ exports.getApplicationDetail = async (userId, applicationId) => {
       isDeleted: true,
       createdAt: true,
       updatedAt: true,
+      job: { include: { company: true } },
     },
-
-    include: { job: { include: { company: true } } },
   });
   if (!app) throw new Error("Không tìm thấy đơn ứng tuyển.");
   return app;
@@ -184,5 +203,14 @@ exports.deleteRejectedApplication = async (userId, applicationId) => {
     data: { isDeleted: true }, // Đã sửa thành isDeleted
   });
 
-  return true;
+    return true;
+};  
+
+// ==============================================================================
+// 6. LẤY ĐƠN ỨNG TUYỂN ĐÃ RÚT TRƯỚC ĐÓ (để điền thông tin cũ khi nộp lại)
+exports.getPreviousApplication = async (userId, jobId) => {
+    return await prisma.application.findFirst({
+        where: { userId, jobId, isDeleted: true },
+        orderBy: { updatedAt: 'desc' }
+    });
 };

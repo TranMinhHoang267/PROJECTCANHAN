@@ -8,8 +8,8 @@ router.use(protect);
 router.use(authorize(ROLES.CANDIDATE));
 
 // Craete chat endpoint
-router.post("/chat", chat.chat);
+router.post("/", chat.chat);
 //Get all chat history of user
-router.get("/chat-history", chat.chatHistory);
+router.get("/", chat.chatHistory);
 
 module.exports = router;

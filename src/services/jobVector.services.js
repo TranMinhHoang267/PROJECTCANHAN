@@ -14,6 +14,28 @@ const {
   textStandardization,
 } = require("../utils/preprocessing/textStandardization");
 
+
+// --- HÀM HỖ TRỢ RETRY ---
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function retryEmbedding(chunk, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const embedding = await textEmbedding(chunk);
+      if (embedding) return embedding;
+      throw new Error("Embedding returned empty");
+    } catch (error) {
+      if (i === retries - 1) {
+        console.error(`Thất bại sau ${retries} lần thử cho đoạn văn bản.`);
+        throw error;
+      }
+      const waitTime = Math.pow(2, i) * 2000; // Đợi 2s, 4s, 8s
+      console.warn(`Thử lại lần ${i + 1} sau ${waitTime}ms do lỗi API...`);
+      await delay(waitTime);
+    }
+  }
+}
+
 /**
  * @typedef {Object} ProcessedChunk
  * @property {string} content - raw text chunk after cleaning and chunking
@@ -28,6 +50,7 @@ const {
  * @param {ProcessedChunk[]} processedChunks - An array of objects containing chunk content, its embedding, and index
  */
 async function _storeNewJobVector(jobId, userId, companyId, processedChunks) {
+  
   if (!jobId || !processedChunks || !Array.isArray(processedChunks)) {
     throw new Error("Invalid input for storeJobVector");
   }
@@ -115,77 +138,41 @@ async function updateExistingJobVector(
  * @param {string} userId - user ID
  */
 async function processAndStoreJobVector(job, userId) {
-  // Step 1: Clean the job data to remove noise and irrelevant information
+  // console.log("DEBUG Background Job userId:", userId); // Nếu log ra undefined, nghĩa là service chưa nhận được biến
+  // Step 1: Clean
   const cleanedText = cleaningJob(job);
-  if (!cleanedText) {
-    console.warn(
-      `Job ${job.id} has insufficient content after cleaning. Skipping vectorization.`,
-    );
-    return;
-  }
-  // Step 2: Standardize the cleaned text to ensure consistent representation, especially for Vietnamese text
-  let standardizedText = [];
-  for (const item of cleanedText) {
-    const standardized = textStandardization(item);
-    if (standardized) {
-      standardizedText.push(standardized);
-    }
-  }
-  // Step 3: Chunk the standardized text into smaller pieces suitable for embedding generation
+  if (!cleanedText) return;
+
+  // Step 2: Standardize
+  let standardizedText = cleanedText.map(item => textStandardization(item)).filter(Boolean);
+
+  // Step 3: Chunk
   let chunks = arrayChunking(standardizedText);
-  if (chunks.length === 0) {
-    console.warn(
-      `Job ${job.id} has no valid chunks after chunking. Skipping vectorization.`,
-    );
-  }
-  // Step 4: Generate embeddings for each chunk using the embedding model
+  if (chunks.length === 0) return;
+
+  // Step 4: Generate embeddings với cơ chế RETRY
   let chunkEmbeddings = [];
   for (const chunk of chunks) {
-    const embedding = await textEmbedding(chunk);
-    if (!embedding) {
-      throw new Error(
-        `Failed to generate embedding for a chunk in Job ${job.id}`,
-      );
-    }
+    // Gọi hàm có retry ở đây
+    const embedding = await retryEmbedding(chunk); 
     chunkEmbeddings.push(embedding);
   }
-  // Step 5: Create processed chunks with embeddings
-  // Check if job id is exists in the database before storing
-  // if it exists, we can update the existing chunks and embeddings instead of creating new ones to avoid duplication and maintain data integrity
 
-  const existingChunks = await prisma.jobVectors.findMany({
-    where: { jobId: job.id },
-  });
-
+  // Step 5 & 6: Xử lý và lưu DB (Logic cũ của bạn)
   const processedChunks = chunks.map((chunk, index) => {
-    // Handle the case where the embedding might be returned as a Tensor (e.g., from Transformers.js) instead of a plain array. We convert it to an array if necessary to ensure consistent storage in the database.
     const embeddingArray = Array.isArray(chunkEmbeddings[index])
       ? chunkEmbeddings[index]
-      : // @ts-ignore
-        Array.from(chunkEmbeddings[index].data); // if is is a Tensor from Transformers.js, convert it to array
+      : Array.from(chunkEmbeddings[index].data);
 
-    return {
-      content: chunk,
-      embedding: embeddingArray,
-      index,
-    };
+    return { content: chunk, embedding: embeddingArray, index };
   });
 
-  if (!existingChunks || existingChunks.length === 0) {
-    // Step 6: Store the processed chunks and their embeddings in the database
-    await _storeNewJobVector(
-      job.id,
-      userId,
-      job.companyId,
-      processedChunks,
-    );
+  const existingChunks = await prisma.jobVectors.findMany({ where: { jobId: job.id } });
+
+  if (existingChunks.length === 0) {
+    await _storeNewJobVector(job.id, userId, job.companyId, processedChunks);
   } else {
-    await updateExistingJobVector(
-      job.id,
-      userId,
-      job.companyId,
-      processedChunks,
-    );
+    await updateExistingJobVector(job.id, userId, job.companyId, processedChunks);
   }
 }
 
