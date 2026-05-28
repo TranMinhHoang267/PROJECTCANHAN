@@ -71,3 +71,13 @@ exports.deleteRejectedApplication = async (req, res) => {
         return handleError(res, error, 'xóa đơn ứng tuyển bị từ chối');
     }
 };
+
+// GET /api/applications/job/:jobId/previous
+exports.getPreviousApplication = async (req, res) => {
+    try {
+        const data = await ApplicationService.getPreviousApplication(req.user.id, req.params.jobId);
+        return res.status(200).json({ status: 'success', data });
+    } catch (error) {
+        return handleError(res, error, 'lấy thông tin đơn ứng tuyển cũ');
+    }
+};

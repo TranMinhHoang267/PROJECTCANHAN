@@ -6,12 +6,11 @@ const { messageResponse, TYPE } = require("../../utils/format/response.format");
 
 const key = process.env.GG_API_KEY;
 if (!key) {
-  console.error("GEMINI_API_KEY is not set in environment variables.");
+  console.error("GG_API_KEY is not set in environment variables.");
   process.exit(1);
 }
-console.log("GEMINI_API_KEY is set, proceeding with initialization.", {
-  key,
-});
+console.log("GEMINI_API_KEY is set, proceeding with initialization. Prefix:", 
+key.substring(0, 5) + "...");
 
 // Khởi tạo SDK với Key của Hào
 

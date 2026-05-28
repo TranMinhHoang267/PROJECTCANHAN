@@ -35,3 +35,30 @@ exports.getCompanyDetail = async (req, res) => {
         return handleError(res, error, 'lấy chi tiết công ty');
     }
 };
+
+exports.getAllJobs = async (req, res) => {
+    try {
+        const filters = {
+            limit: parseInt(req.query.limit) || 10,
+            search: req.query.search || null,
+            companyId: req.query.companyId || null
+        };
+        const result = await publicService.getAllJobs(filters);
+        return res.status(200).json({ status: 'success', data: result });
+    } catch (error) {
+        return handleError(res, error, 'lấy danh sách tin tuyển dụng');
+    }
+};
+
+exports.getAllCompanies = async (req, res) => {
+    try {
+        const filters = {
+            limit: parseInt(req.query.limit) || 10,
+            search: req.query.search || null
+        };
+        const result = await publicService.getAllCompanies(filters);
+        return res.status(200).json({ status: 'success', data: result });
+    } catch (error) {
+        return handleError(res, error, 'lấy danh sách công ty');
+    }
+};

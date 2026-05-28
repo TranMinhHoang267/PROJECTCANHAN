@@ -218,6 +218,7 @@ exports.updateJob = async (userId, jobId, data) => {
   if (Object.keys(updateData).length > 0 && job.status !== "paused") {
     updateData.status = "pending";
     updateData.rejectionReason = null;
+    updateData.vectorStatus = "PENDING";
   }
 
   const updatedJob = await prisma.job.update({
@@ -246,7 +247,7 @@ exports.updateJob = async (userId, jobId, data) => {
         console.log(
           `[Background Job] Starting embedding process for Job ID: ${updatedJob.id}`,
         );
-        await JobVectorService.processAndStoreJobVector(updatedJob);
+        await JobVectorService.processAndStoreJobVector(updatedJob, userId);
       } catch (err) {
         console.error(
           `[Background Job] Error occurred while processing embedding for Job ID: ${updatedJob.id}`,

@@ -61,7 +61,7 @@ const cleaningJob = (job) => {
 
   // If more than 30% of the text was removed, it might be too noisy, so we can choose to return an empty string or the original text}
   // Description is crucial for understanding the job, if it's too noisy, we skip embedding this job
-  if (desc.length < job.description.length * 0.7) {
+  if (job.description && desc.length < job.description.length * 0.7) {
     desc = job.description;
   }
   /**

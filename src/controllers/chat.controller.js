@@ -14,16 +14,27 @@ exports.chat = async (req, res) => {
   const ans = await chat.chat(question, userId);
   console.log("Answer:", ans);
 
-  if (ans.type === "SUCCESS")
-    //storing question and answer to database
+  if (ans.type === "SUCCESS") {
+    // 1. Lấy dữ liệu văn bản an toàn nhất
+    // Ưu tiên: ans.data.message -> sau đó đến ans.message
+    let contentToSave = ans.data?.message || ans.message;
+
+    // 2. Ép kiểu bắt buộc về String
+    // Nếu nó là object, chuyển sang JSON string, nếu là số, chuyển sang String
+    const finalAnswer = typeof contentToSave === 'string' 
+      ? contentToSave 
+      : JSON.stringify(contentToSave);
+
+    // 3. Lưu vào Database
     await prisma.userChat.create({
       data: {
         userId: userId,
         question: question,
-        template: ans.message,
-        answer: JSON.stringify(ans.data) ?? "",
+        template: 0,
+        answer: finalAnswer // Bây giờ chắc chắn là chuỗi
       },
     });
+  }
 
   return res.status(200).json(ans);
 };

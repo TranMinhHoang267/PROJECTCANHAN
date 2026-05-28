@@ -30,7 +30,7 @@ exports.getApplicantsByJob = async (userId, jobId, filters = {}) => {
   const pageNumber = Math.max(1, parseInt(filters.page) || 1);
   const skip = (pageNumber - 1) * pageSize;
 
-  const where = { jobId };
+  const where = { jobId, isDeleted: false };
   if (filters.status) where.status = filters.status;
 
   const [count, applications] = await Promise.all([
@@ -109,7 +109,7 @@ exports.getAllApplicants = async (userId, filters = {}) => {
     };
   }
 
-  const where = { jobId: { in: jobIds } };
+  const where = { jobId: { in: jobIds }, isDeleted: false };
   if (filters.status) where.status = filters.status;
 
   const [count, applications] = await Promise.all([
@@ -173,7 +173,7 @@ exports.getApplicationDetail = async (userId, applicationId) => {
   const jobIds = await _getJobIds(companyId);
 
   const app = await prisma.application.findFirst({
-    where: { id: applicationId, jobId: { in: jobIds } },
+    where: { id: applicationId, jobId: { in: jobIds }, isDeleted: false },
     include: {
       user: {
         select: {
@@ -234,7 +234,7 @@ exports.getCvFile = async (userId, applicationId, mode = "view") => {
   const jobIds = await _getJobIds(companyId);
 
   const app = await prisma.application.findFirst({
-    where: { id: applicationId, jobId: { in: jobIds } },
+    where: { id: applicationId, jobId: { in: jobIds }, isDeleted: false },
   });
 
   if (!app)

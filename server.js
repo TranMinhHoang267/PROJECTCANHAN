@@ -64,14 +64,14 @@ app.use("/api/bookmarks", bookmarkRoutes);
 app.use("/api/suggestions", jobSuggestionRoutes);
 app.use("/api/search-jobs", searchJobRoutes);
 app.use("/api/public", publicRoutes);
-
+app.use("/api/chat", jobChatRoutes);
+app.use("/api/chat-history", jobChatRoutes);
 // --- Employer ---
 app.use("/api/employer", employerRoutes);
 app.use("/api/employer/jobs", jobManagementRoutes);
 app.use("/api/employer/applicants", applicantRoutes);
 app.use("/api/employer/dashboard", dashboardRoutes);
-app.use("/api/chat", jobChatRoutes);
-app.use("/api/chat-history", jobChatRoutes);
+
 
 // --- Admin ---
 app.use("/api/admin/companies", adminCompanyRoutes);

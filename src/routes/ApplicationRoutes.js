@@ -42,4 +42,11 @@ router.delete('/:id/rejected', ApplicationController.deleteRejectedApplication);
  */
 router.delete('/:id', ApplicationController.withdrawApplication);
 
+/**
+ * @route   GET /api/applications/job/:jobId/previous
+ * @desc    Lấy đơn ứng tuyển đã rút trước đó
+ * @access  Private
+ */
+router.get('/job/:jobId/previous', ApplicationController.getPreviousApplication);
+
 module.exports = router;

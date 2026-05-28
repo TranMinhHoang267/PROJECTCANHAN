@@ -265,10 +265,10 @@ const _handleComparison = async (refined_question, entities, type, userId) => {
         title: true,
         description: true,
         benefits: true,
-        salary_min: true,
-        salary_max: true,
+        salaryMin: true, // Sửa: salary_min -> salaryMin
+        salaryMax: true, // Sửa: salary_max -> salaryMax
         location: true,
-        job_type: true,
+        jobType: true,   // Sửa: job_type -> jobType
         jobLevel: true,
         skills: {
           select: {
@@ -287,10 +287,11 @@ const _handleComparison = async (refined_question, entities, type, userId) => {
       id: job.id,
       "Vị trí": job.title,
       "Công ty": job.company.name,
-      "Mức lương": `${job.salary_min} - ${job.salary_max} USD`,
+      // Cập nhật lại tên biến ở đây để không bị hiển thị "undefined - undefined"
+      "Mức lương": `${job.salaryMin} - ${job.salaryMax} USD`, 
       "Địa điểm": `${job.location}`,
       "Mô tả": job.description,
-      "Loại việc làm": job.job_type,
+      "Loại việc làm": job.jobType, // Cập nhật lại tên biến
       "Trình độ": job.jobLevel,
       "Kỹ năng": job.skills.map((skill) => skill),
     }));
