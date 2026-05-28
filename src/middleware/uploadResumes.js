@@ -3,7 +3,7 @@ const path = require("path");
 const fs = require("fs");
 const prisma = require("../config/prisma");
 const process = require("process");
-const UPLOAD_DIR = path.join(process.cwd(), "src", "uploads", "resumes");
+const UPLOAD_DIR = path.join(process.cwd(), "uploads", "resumes");
 
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });

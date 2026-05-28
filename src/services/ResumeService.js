@@ -4,7 +4,7 @@ const fs = require("fs");
 const ResumeVectorService = require("./resumeVector.services");
 const process = require("process");
 
-const UPLOAD_DIR = path.join(process.cwd(), "src", "uploads", "resumes");
+const UPLOAD_DIR = path.join(process.cwd(), "uploads", "resumes");
 
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -28,8 +28,9 @@ exports.uploadResume = async (userId, file) => {
       fileUrl,
       isDefault: count === 0,
     },
-  });
 
+  });
+  console.log(resume);
   //when storing success, we will process the content of file to embedding
   if (resume) {
     global.setImmediate(async () => {
@@ -95,7 +96,7 @@ exports.deleteResume = async (userId, resumeId) => {
     throw new Error("Không tìm thấy CV hoặc bạn không có quyền xóa.");
   }
 
-  const filePath = path.join(process.cwd(), "src", resume.fileUrl);
+  const filePath = path.join(process.cwd(), resume.fileUrl);
   if (fs.existsSync(filePath)) {
     try {
       fs.unlinkSync(filePath);

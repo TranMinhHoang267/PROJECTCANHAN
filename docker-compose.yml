@@ -31,10 +31,9 @@ services:
       - .:/app
       # Quan trọng: Giữ node_modules của container không bị máy host đè lên
       - /app/node_modules
-      - ./src/uploads:/app/src/uploads
+      - ./uploads:/app/uploads
     security_opt:
       - no-new-privileges:true
-
 networks:
   default:
     name: canhan_backend_network

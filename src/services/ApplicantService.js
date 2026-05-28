@@ -225,6 +225,7 @@ exports.getApplicationDetail = async (userId, applicationId) => {
         },
       },
       job: { select: { id: true, title: true, location: true, jobType: true } },
+      resume: { select: { fileUrl: true } },
     },
   });
 
@@ -243,7 +244,7 @@ exports.getApplicationDetail = async (userId, applicationId) => {
     applicationId: app.id,
     status: app.status,
     coverLetter: app.coverLetter,
-    resumeUrl: app.resumeUrl,
+    resumeUrl: app.resume?.fileUrl || null,
     appliedAt: app.createdAt,
     job: app.job,
     candidate: {
@@ -263,6 +264,9 @@ exports.getCvFile = async (userId, applicationId, mode = "view") => {
 
   const app = await prisma.application.findFirst({
     where: { id: applicationId, jobId: { in: jobIds }, isDeleted: false },
+    select: {
+      resume: { select: { fileUrl: true } }
+    }
   });
 
   if (!app)
@@ -283,7 +287,7 @@ exports.getCvFile = async (userId, applicationId, mode = "view") => {
     };
   }
 
-  const relativePath = app.resumeUrl.replace(/^\//, "");
+  const relativePath = app.resume.fileUrl.replace(/^\//, "");
 
   // Danh sách các khả năng đường dẫn tuyệt đối để tìm file
   const pathsToTry = [
@@ -306,7 +310,7 @@ exports.getCvFile = async (userId, applicationId, mode = "view") => {
     console.error("--- CV FILE NOT FOUND ---");
     console.log("Tried these absolute paths:");
     pathsToTry.forEach((p) => console.log(" -", path.resolve(p)));
-    console.log("Database URL:", app.resumeUrl);
+    console.log("Database URL:", app.resume.fileUrl);
     throw new Error("File CV không tồn tại trên server.");
   }
 
