@@ -31,14 +31,10 @@ exports.getProfile = async (userId) => {
 };
 
 exports.updateProfile = async (userId, data) => {
-    const { fullName, phone, summary, address, city, dateOfBirth, gender, headline, linkedinUrl } = data;
+    const { fullName, phone, summary, address, city, dateOfBirth, gender, headline } = data;
 
     if (phone && !/^0\d{9}$/.test(phone)) {
         throw new Error('Số điện thoại phải bắt đầu bằng số 0 và có đúng 10 chữ số');
-    }
-
-    if (linkedinUrl && !linkedinUrl.startsWith('https://')) {
-        throw new Error('LinkedIn URL không hợp lệ cần thêm https://');
     }
 
     if (fullName !== undefined) {

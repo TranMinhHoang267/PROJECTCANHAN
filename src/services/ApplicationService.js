@@ -18,8 +18,22 @@ exports.applyJob = async (userId, data) => {
 
   await _getActiveJob(jobId);
 
-    const existed = await prisma.application.findFirst({ where: { userId, jobId, isDeleted: false } });
-    if (existed) throw new Error('Bạn đã nộp đơn ứng tuyển vị trí này rồi.');
+    const existed = await prisma.application.findFirst({
+      where: {
+        userId,
+        jobId,
+        OR: [
+          { isDeleted: false },
+          { isDeleted: true, status: "rejected" }
+        ]
+      }
+    });
+    if (existed) {
+      if (existed.status === "rejected") {
+        throw new Error("Hồ sơ của bạn cho vị trí này đã được xử lý (từ chối hoặc loại). Bạn không thể nộp lại.");
+      }
+      throw new Error("Bạn đã nộp đơn ứng tuyển vị trí này rồi.");
+    }
 
   // check resume exist or not
   const resume = await prisma.resume.findFirst({

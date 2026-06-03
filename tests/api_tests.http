@@ -1,0 +1,323 @@
+### Hướng dẫn sử dụng:
+### Cài đặt extension "REST Client" trong VS Code.
+### Bạn có thể nhấn "Send Request" trực tiếp trên mỗi API dưới đây để chạy thử nghiệm.
+
+@baseUrl = http://localhost:3000
+
+### ==========================================
+### 1. ĐĂNG KÝ & ĐĂNG NHẬP (AUTH)
+### ==========================================
+
+# @name registerCandidate
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "fullName": "Nguyen Van Candidate",
+  "email": "candidate.test@gmail.com",
+  "phone": "0901234567",
+  "password": "password123"
+}
+
+###
+
+# @name registerRecruiter
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "fullName": "Tran Company Recruiter",
+  "email": "recruiter.test@gmail.com",
+  "phone": "0912345678",
+  "password": "password123",
+  "companyName": "Tech Connect Corp",
+  "address": "Quan 1, HCM"
+}
+
+###
+
+# @name loginCandidate
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "candidate.test@gmail.com",
+  "password": "password123"
+}
+
+### Lưu Access Token của Candidate từ kết quả đăng nhập phía trên
+@candidateToken = {{loginCandidate.response.body.data.accessToken}}
+
+###
+
+# @name loginRecruiter
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "recruiter.test@gmail.com",
+  "password": "password123"
+}
+
+### Lưu Access Token của Recruiter từ kết quả đăng nhập phía trên
+@recruiterToken = {{loginRecruiter.response.body.data.accessToken}}
+
+###
+
+# @name loginAdmin
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@jobconnect.com",
+  "password": "adminpassword123"
+}
+
+### Lưu Access Token của Admin từ kết quả đăng nhập phía trên
+@adminToken = {{loginAdmin.response.body.data.accessToken}}
+
+###
+
+# @name refreshToken
+POST {{baseUrl}}/api/auth/refresh-token
+Content-Type: application/json
+
+{
+  "refreshToken": "{{loginCandidate.response.body.data.refreshToken}}"
+}
+
+
+### ==========================================
+### 2. ỨNG VIÊN (CANDIDATE MODULE)
+### ==========================================
+
+### Xem hồ sơ ứng viên
+GET {{baseUrl}}/api/candidate/profile
+Authorization: Bearer {{candidateToken}}
+
+###
+
+### Cập nhật hồ sơ ứng viên
+PUT {{baseUrl}}/api/candidate/profile
+Authorization: Bearer {{candidateToken}}
+Content-Type: application/json
+
+{
+  "fullName": "Nguyen Van Candidate Update",
+  "phone": "0901234567",
+  "headline": "Senior NodeJS Developer",
+  "summary": "Kinh nghiệm 5 năm xây dựng kiến trúc microservices",
+  "address": "789 Nguyen Dinh Chieu",
+  "city": "Hồ Chí Minh",
+  "dateOfBirth": "1998-10-15",
+  "gender": "male"
+}
+
+###
+
+### Thêm kinh nghiệm làm việc (Portfolio)
+POST {{baseUrl}}/api/portfolio/experiences
+Authorization: Bearer {{candidateToken}}
+Content-Type: application/json
+
+{
+  "company": "FPT Software",
+  "title": "Backend Developer",
+  "startDate": "2021-06-01",
+  "endDate": "2023-12-31",
+  "description": "Lập trình API Node.js và quản trị Database PostgreSQL"
+}
+
+###
+
+### Thêm học vấn
+POST {{baseUrl}}/api/portfolio/educations
+Authorization: Bearer {{candidateToken}}
+Content-Type: application/json
+
+{
+  "school": "Đại học Bách Khoa TP.HCM",
+  "degree": "Kỹ sư",
+  "field": "Khoa học Máy tính",
+  "startDate": "2016-09-05",
+  "endDate": "2020-05-30"
+}
+
+###
+
+### Cập nhật kỹ năng ứng viên
+PUT {{baseUrl}}/api/portfolio/skills
+Authorization: Bearer {{candidateToken}}
+Content-Type: application/json
+
+{
+  "skills": ["NodeJS", "ExpressJS", "PostgreSQL", "Docker", "Sequelize"]
+}
+
+###
+
+### Xem danh sách CV ứng viên
+GET {{baseUrl}}/api/resumes
+Authorization: Bearer {{candidateToken}}
+
+###
+
+### Xem danh sách tin tuyển dụng đã lưu (Bookmark)
+GET {{baseUrl}}/api/bookmarks?page=1&limit=10
+Authorization: Bearer {{candidateToken}}
+
+###
+
+### Nhận gợi ý công việc dựa trên kỹ năng của ứng viên
+GET {{baseUrl}}/api/suggestions?limit=5
+Authorization: Bearer {{candidateToken}}
+
+
+### ==========================================
+### 3. NHÀ TUYỂN DỤNG (RECRUITER MODULE)
+### ==========================================
+
+### Xem hồ sơ công ty
+GET {{baseUrl}}/api/employer/profile
+Authorization: Bearer {{recruiterToken}}
+
+###
+
+### Cập nhật hồ sơ công ty (Cần được admin duyệt lại sau khi sửa)
+PUT {{baseUrl}}/api/employer/profile
+Authorization: Bearer {{recruiterToken}}
+Content-Type: application/json
+
+{
+  "name": "Tech Connect Corp",
+  "description": "Chúng tôi cung cấp giải pháp chuyển đổi số toàn diện",
+  "website": "https://techconnect.com",
+  "address": "Lầu 10, Tòa nhà Bitexco, Quận 1",
+  "city": "Hồ Chí Minh",
+  "size": "100-200"
+}
+
+### Lưu ID công ty từ kết quả cập nhật profile (hoặc dùng prisma để xem)
+@companyId = {{employerProfile.response.body.data.id}}
+
+###
+
+# @name createJob
+POST {{baseUrl}}/api/employer/jobs
+Authorization: Bearer {{recruiterToken}}
+Content-Type: application/json
+
+{
+  "title": "Tuyển Dụng Senior NodeJS Developer",
+  "description": "Thiết kế kiến trúc hệ thống, phát triển các tính năng backend.",
+  "requirements": "Trên 4 năm kinh nghiệm. Thành thạo NodeJS, Express, PostgreSQL.",
+  "benefits": "Lương tháng 13, bảo hiểm đầy đủ, review lương 2 lần/năm.",
+  "salaryMin": 2000,
+  "salaryMax": 3500,
+  "location": "Hồ Chí Minh",
+  "jobType": "Full-time",
+  "jobLevel": "Senior",
+  "deadline": "2026-12-31",
+  "skills": ["NodeJS", "PostgreSQL", "Docker"]
+}
+
+### Lưu ID tin tuyển dụng vừa tạo
+@jobId = {{createJob.response.body.data.id}}
+
+###
+
+### Xem danh sách tin tuyển dụng của công ty mình
+GET {{baseUrl}}/api/employer/jobs?page=1&limit=10
+Authorization: Bearer {{recruiterToken}}
+
+###
+
+### Xem danh sách ứng viên nộp hồ sơ vào tin tuyển dụng cụ thể
+GET {{baseUrl}}/api/employer/applicants?jobId={{jobId}}
+Authorization: Bearer {{recruiterToken}}
+
+
+### ==========================================
+### 4. QUẢN TRỊ VIÊN (ADMIN MODULE)
+### ==========================================
+
+### Xem danh sách công ty đang chờ duyệt
+GET {{baseUrl}}/api/admin/companies/pending
+Authorization: Bearer {{adminToken}}
+
+###
+
+### Duyệt hồ sơ công ty
+PATCH {{baseUrl}}/api/admin/companies/{{companyId}}/review
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "action": "approved"
+}
+
+###
+
+### Xem danh sách tin tuyển dụng đang chờ duyệt
+GET {{baseUrl}}/api/admin/jobs/pending
+Authorization: Bearer {{adminToken}}
+
+###
+
+### Duyệt tin tuyển dụng tuyển NodeJS
+PATCH {{baseUrl}}/api/admin/jobs/{{jobId}}/review
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "action": "approved"
+}
+
+###
+
+### Xem danh sách tất cả người dùng trong hệ thống
+GET {{baseUrl}}/api/admin/users?role=candidate
+Authorization: Bearer {{adminToken}}
+
+
+### ==========================================
+### 5. CHATBOT RAG & PUBLIC APIS (AI ASSISTANT)
+### ==========================================
+
+### Đăng ký ứng tuyển công việc (Candidate thực hiện nộp hồ sơ)
+POST {{baseUrl}}/api/applications
+Authorization: Bearer {{candidateToken}}
+Content-Type: application/json
+
+{
+  "jobId": "{{jobId}}",
+  "coverLetter": "Chào anh/chị, tôi rất mong muốn được gia nhập đội ngũ với vai trò Senior Nodejs Developer."
+}
+
+###
+
+### Lưu bookmark công việc (Toggle bookmark)
+POST {{baseUrl}}/api/bookmarks/{{jobId}}
+Authorization: Bearer {{candidateToken}}
+
+###
+
+# @name askChatbot
+POST {{baseUrl}}/api/chat/chat
+Authorization: Bearer {{candidateToken}}
+Content-Type: application/json
+
+{
+  "question": "Tìm giúp tôi công việc lập trình NodeJS tại Hồ Chí Minh lương cao"
+}
+
+###
+
+### Xem lịch sử chat với trợ lý ảo
+GET {{baseUrl}}/api/chat-history/chat-history
+Authorization: Bearer {{candidateToken}}
+
+###
+
+### Tìm kiếm ngữ nghĩa công việc (Public API - Không cần đăng nhập)
+GET {{baseUrl}}/api/public/job-suggestions?keyword=NodeJS&location=HCM&salary=1500

@@ -14,10 +14,15 @@ exports.getJobSuggestions = async (userId, filters = {}) => {
         }
     });
 
-    // 2. Lấy tất cả job đã apply (kể cả đã xóa/rút) để loại trừ
+    // 2. Lấy tất cả job đã ứng tuyển để loại trừ (không gợi ý các công việc đang ứng tuyển hoặc đã bị từ chối)
     const appliedApplications = await prisma.application.findMany({
-        
-        where: { userId, isDeleted: false }, 
+        where: {
+            userId,
+            OR: [
+                { isDeleted: false },
+                { isDeleted: true, status: "rejected" }
+            ]
+        },
         select: { jobId: true }
     });
 

@@ -83,6 +83,7 @@ exports.getApplicantsByJob = async (userId, jobId, filters = {}) => {
       applicationId: app.id,
       status: app.status,
       coverLetter: app.coverLetter,
+      resumeId: app.resume?.id,
       resumeUrl: app.resume?.fileUrl,
       appliedAt: app.createdAt,
       candidate: {
@@ -176,6 +177,7 @@ exports.getAllApplicants = async (userId, filters = {}) => {
     applications: applications.map((app) => ({
       applicationId: app.id,
       status: app.status,
+      resumeId: app.resume?.id || null,
       resumeUrl: app.resume?.fileUrl || null,
       appliedAt: app.createdAt,
       job: { id: app.job?.id, title: app.job?.title },
@@ -390,7 +392,10 @@ exports.deleteApplication = async (userId, applicationId) => {
 
   await prisma.application.update({
     where: { id: applicationId },
-    data: { isDeleted: true },
+    data: { 
+      status: "rejected",
+      isDeleted: true 
+    },
   });
 
   return true;
