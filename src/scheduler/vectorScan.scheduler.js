@@ -13,8 +13,7 @@
  *   3. Kiểm tra xem vectorStatus đã đổi thành 'COMPLETED' chưa
  *      và summary đã được cập nhật chưa (đối với resume).
  *
- * Lưu ý: File này KHÔNG sửa bất kỳ file backend nào khác.
- *        Nó được đăng ký riêng trong server.js hoặc nơi khởi động app.
+ 
  */
 
 const cron = require("node-cron");

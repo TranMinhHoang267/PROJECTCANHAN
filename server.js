@@ -48,11 +48,8 @@ const adminReportRoutes = require("./src/routes/AdminReportRoutes");
 const adminRoutes = require("./src/routes/adminRoutes");
 const searchJobRoutes = require("./src/routes/Search_jobRoutes");
 const chat = require("./src/routes/chat.routers");
-const {setupVectorScanSchedule} = require('./src/scheduler/vectorScan.scheduler')
-setupVectorScanSchedule();
-const {
-  setupVectorSchedule,
-} = require("./src/scheduler/vectorRetry.scheduler");
+const { setupVectorSchedule } = require("./src/scheduler/vectorRetry.scheduler");
+const { setupVectorScanSchedule } = require("./src/scheduler/vectorScan.scheduler");
 const smartRoutes = require("./src/routes/smart.routers");
 // Router công khai
 const publicRoutes = require("./src/routes/PublicRoutes");
@@ -90,7 +87,8 @@ app.get("/", (req, res) => {
   });
 });
 
-setupVectorSchedule(); // Kích hoạt lịch quét vector hàng ngày
+setupVectorSchedule();      
+setupVectorScanSchedule();  
 
 // Khởi động Server (Database migrations handled via: npx prisma db push)
 const server = app.listen(PORT, () => {
