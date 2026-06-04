@@ -2,7 +2,10 @@ const prisma = require('../config/prisma');
 
 exports.searchJobs = async (filters) => {
     const {
-        keyword, location, jobType, jobLevel, salary,
+        keyword, location, jobType, jobLevel,
+        // salaryMin / salaryMax — dải lương (đơn vị VNĐ)
+        // negotiable = 'true' — chỉ lọc job "Thỏa thuận" (salaryMin IS NULL AND salaryMax IS NULL)
+        salaryMin, salaryMax, negotiable,
         page = 1, limit = 10
     } = filters;
 
@@ -74,15 +77,65 @@ exports.searchJobs = async (filters) => {
         });
     }
 
-    // 7. Salary — lọc job có mức lương phù hợp (salaryMin <= ngưỡng người dùng)
-    if (salary) {
-        const salaryNum = parseInt(salary);
-        andConditions.push({
-            OR: [
-                { salaryMin: { lte: salaryNum } },
-                { salaryMin: null }
-            ]
-        });
+    // 7. Salary filter
+    // Trường hợp 1: chỉ lọc "Thỏa thuận" (cả salaryMin và salaryMax đều NULL)
+    if (negotiable === 'true') {
+        andConditions.push({ salaryMin: null, salaryMax: null });
+    }
+    // Trường hợp 2: lọc theo dải lương
+    else if (salaryMin || salaryMax) {
+        const minNum = salaryMin ? parseInt(salaryMin) : null;
+        const maxNum = salaryMax ? parseInt(salaryMax) : null;
+
+        if (minNum !== null && maxNum !== null) {
+            // Dải cụ thể: lấy job có khoảng lương giao nhau với [minNum, maxNum]
+            // Điều kiện giao nhau: job.salaryMax >= minNum AND job.salaryMin <= maxNum
+            andConditions.push({
+                OR: [
+                    // Job có lương cụ thể và khoảng giao nhau
+                    {
+                        AND: [
+                            { salaryMin: { not: null } },
+                            { salaryMax: { not: null } },
+                            { salaryMax: { gte: minNum } },
+                            { salaryMin: { lte: maxNum } }
+                        ]
+                    },
+                    // Job chỉ có salaryMin (không có max): salaryMin nằm trong khoảng
+                    {
+                        AND: [
+                            { salaryMin: { not: null } },
+                            { salaryMax: null },
+                            { salaryMin: { gte: minNum } },
+                            { salaryMin: { lte: maxNum } }
+                        ]
+                    }
+                ]
+            });
+        } else if (minNum !== null) {
+            // Chỉ có salaryMin ("Trên X triệu"):
+            // Lấy job có salaryMax >= minNum HOẶC salaryMin >= minNum (job không có max)
+            andConditions.push({
+                OR: [
+                    { salaryMax: { gte: minNum } },
+                    {
+                        AND: [
+                            { salaryMax: null },
+                            { salaryMin: { gte: minNum } }
+                        ]
+                    }
+                ]
+            });
+        } else if (maxNum !== null) {
+            // Chỉ có salaryMax ("Dưới X triệu"):
+            // Lấy job có salaryMin <= maxNum HOẶC job thỏa thuận (salaryMin null)
+            andConditions.push({
+                OR: [
+                    { salaryMin: { lte: maxNum } },
+                    { salaryMin: null }
+                ]
+            });
+        }
     }
 
     const where = { AND: andConditions };

@@ -63,8 +63,9 @@ exports.getUserGrowth = async () => {
     rows.forEach(row => {
         const month = new Date(row.month).toISOString().slice(0, 7);
         if (!byMonth[month]) byMonth[month] = { month, candidate: 0, recruiter: 0, total: 0 };
-        byMonth[month][row.role] = parseInt(row.count);
-        byMonth[month].total += parseInt(row.count);
+        const cnt = Number(row.count); // PostgreSQL COUNT() trả về BigInt
+        byMonth[month][row.role] = cnt;
+        byMonth[month].total += cnt;
     });
 
     return Object.values(byMonth);
@@ -86,9 +87,10 @@ exports.getApplicationsByMonth = async () => {
     rows.forEach(row => {
         const month = new Date(row.month).toISOString().slice(0, 7);
         if (!byMonth[month]) byMonth[month] = { month, total: 0, accepted: 0, rejected: 0 };
-        byMonth[month].total += parseInt(row.count);
-        if (row.status === 'accepted') byMonth[month].accepted += parseInt(row.count);
-        if (row.status === 'rejected') byMonth[month].rejected += parseInt(row.count);
+        const cnt = Number(row.count); // PostgreSQL COUNT() trả về BigInt
+        byMonth[month].total += cnt;
+        if (row.status === 'accepted') byMonth[month].accepted += cnt;
+        if (row.status === 'rejected') byMonth[month].rejected += cnt;
     });
 
     return Object.values(byMonth);

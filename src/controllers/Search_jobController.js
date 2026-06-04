@@ -8,14 +8,18 @@ exports.searchJobs = async (req, res) => {
 
         // 2. Gom tất cả filter
         const filters = {
-            keyword:   req.query.keyword?.trim()  || null,
-            location:  req.query.location?.trim() || null,
-            salary:    req.query.salary            || null,
-            jobType:   req.query.jobType           || null,
-            jobLevel:  req.query.jobLevel          || null,
+            keyword:    req.query.keyword?.trim()  || null,
+            location:   req.query.location?.trim() || null,
+            jobType:    req.query.jobType           || null,
+            jobLevel:   req.query.jobLevel          || null,
+            // Bộ lọc lương mới (thay thế salary đơn)
+            salaryMin:  req.query.salaryMin         || null,
+            salaryMax:  req.query.salaryMax         || null,
+            negotiable: req.query.negotiable        || null,
             page,
             limit
         };
+
 
         // 3. Gọi service
         const result = await searchJobService.searchJobs(filters);

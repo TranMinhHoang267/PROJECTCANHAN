@@ -54,13 +54,13 @@ exports.smartScoringCV = async (jobId, reqOpt = null) => {
     jobSalaryMin: job.salaryMin,
     jobSalaryMax: job.salaryMax,
     jobType: job.jobType,
-    jobLevel: job.obLevel,
+    jobLevel: job.jobLevel,
     jobSkills: job.skills.map((s) => s.skill),
     applications: job.applications.map((app) => ({
-      resumeId: app.resume.id,
-      resumeSummary: app.resume.summary,
+      resumeId: app.resume.id,             
+      resumeSummary: app.resume.summary ?? null,
     })),
-  };
+  };    
 
   const prompt = `${JSON.stringify(cleanResult)}\n
   Yêu cầu: ${reqOpt ?? "Không"}`;
